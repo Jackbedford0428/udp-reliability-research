@@ -39,12 +39,15 @@ __all__ = [
     "data_consolidator"
 ]
 
+with open("db_path.txt", "r") as f:
+    PATH_TO_DATABASE = f.readline()
+    
 
 def data_loader(
     mode='sr', query_dates=False, show_info=False,
     selected_dates=[], selected_exps=[], selected_routes=[],
     excluded_dates=[], excluded_exps=[], excluded_routes=[],
-    root_dir='/Users/jackbedford/Desktop/MOXA/Code/data'):
+    root_dir=PATH_TO_DATABASE):
     
     # Collect experiment dates
     dates = [s for s in sorted(os.listdir(root_dir)) if os.path.isdir(os.path.join(root_dir, s)) and s not in ['backup']]
