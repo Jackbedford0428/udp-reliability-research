@@ -40,7 +40,7 @@ __all__ = [
     "data_consolidator",
     "figure_identity",
     "figure_add_prefix_suffix",
-    "model_prefix",
+    "model_identity",
     "model_add_prefix"
 ]
 
@@ -263,21 +263,21 @@ def figure_add_prefix_suffix(image_path, image_id=None, suffix='.png'):
     if image_label.endswith(suffix):
         image_label = image_label.replace(suffix, '')
     if image_id is None:
-        _, _, _, image_id = figure_identity()
+        date, hms_count, hex_string, image_id = figure_identity()
     image_path = "_".join([image_id[:8], image_label, image_id[9:]]) + suffix
     image_path = os.path.join(dirpath, image_path)
     return image_path
 
 
-def model_prefix():
-    model_prefix.timestamp_str = getattr(model_prefix, 'timestamp_str', datetime_to_str(epoch_to_datetime(time.time())))
-    model_prefix.counter = getattr(model_prefix, 'counter', 0)
-    date = "".join(model_prefix.timestamp_str[:10].split('-'))
-    hour_count = model_prefix.timestamp_str[11:13] + str(model_prefix.counter).zfill(3)
+def model_identity():
+    model_identity.timestamp_str = getattr(model_identity, 'timestamp_str', datetime_to_str(epoch_to_datetime(time.time())))
+    model_identity.counter = getattr(model_identity, 'counter', 0)
+    date = "".join(model_identity.timestamp_str[:10].split('-'))
+    hour_count = model_identity.timestamp_str[11:13] + str(model_identity.counter).zfill(3)
     now = time.time()
     hex_string = generate_hex_string(now, 5)
     model_id = date + '_' + hour_count + hex_string
-    model_prefix.counter += 1
+    model_identity.counter += 1
     return model_id
 
 
@@ -285,7 +285,7 @@ def model_add_prefix(model_path, model_id=None):
     dirpath = os.path.dirname(model_path)
     model_label = os.path.basename(model_path)
     if model_id is None:
-        model_id = model_prefix()
+        model_id = model_identity()
     model_path = "_".join([model_id, model_label])
     model_path = os.path.join(dirpath, model_path)
     return model_path
