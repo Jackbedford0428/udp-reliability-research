@@ -10,8 +10,8 @@
 *.db
 *.bak
 *.o
-__pycache__
 *.pyc
+__pycache__
 .ipynb_checkpoints
 .DS_Store
 test.ipynb
