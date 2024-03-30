@@ -3,6 +3,7 @@ import pandas as pd
 import datetime as dt
 from collections import namedtuple
 import ast
+from .generate_dataframe import generate_dataframe
 
 __all__ = [
     "mi_parse_handover",
@@ -86,7 +87,10 @@ def set_data(df, mode='pcap', tz=0):
 def parse_mi_ho(df, tz=8):
 
     # df = pd.read_csv(f)
-    df["Timestamp"] = df["Timestamp"].swifter.apply(lambda x: pd.to_datetime(x) + dt.timedelta(hours=tz))
+    # df["Timestamp"] = df["Timestamp"].swifter.apply(lambda x: pd.to_datetime(x) + dt.timedelta(hours=tz))
+    if 'Timestamp_BS' not in df.columns:
+        df['Timestamp'] = df['Timestamp'] + pd.Timedelta(hours=tz)
+    
     nr_pci = 'O'
     nr_arfcn = 0
     scells = []
@@ -738,3 +742,29 @@ def mi_parse_handover(df, tz=8, radical=True, endfill=False):
     table = table[['type', 'start', 'end', 'others', 'm_src', 'm_tgt', 's_src', 's_tgt', 'category', 'inter-eNB', 'inter-gNB', 'inter-Freq', 'band_cng', 'inter-RAT', '4G_5G', 'cause', 'near_before_RLF', *selected_cols]]
     
     return table, new_D
+
+
+# ===================== Test =====================
+if __name__ == "__main__":
+    # empty_rrc = "/home/wmnlab/F/database/2024-03-20/UDP_Bandlock_9S_Phone_A/sm08/#01/data/diag_log_sm08_2024-03-20_15-23-10_nr_ml1.csv"
+    # trash_rrc = "/home/wmnlab/F/database/2024-03-20/UDP_Bandlock_9S_Phone_A/sm08/#01/data/diag_log_sm08_2024-03-20_15-23-10_ml1.csv"
+    # empty_df, trash_df = generate_dataframe([empty_rrc, trash_rrc], parse_dates=['Timestamp', 'Timestamp_BS'])
+    # print(empty_df.head())
+    # print(trash_df.head())
+    
+    # print('------------------------------------------')
+    # for df in [empty_df, trash_df]:
+    #     if not df.empty:
+    #         df = df[(df['Timestamp'] - df['Timestamp_BS'] - pd.Timedelta(hours=8)).dt.total_seconds() < 30].reset_index(drop=True)
+    #     print(df.head())
+    
+    sync_rrc = "/home/wmnlab/F/database/2024-03-19/UDP_Bandlock_9S_Phone_BR/sm00/#01/data/diag_log_sm00_2024-03-19_18-39-12_rrc.csv"
+    unsync_rrc = "/home/wmnlab/F/database/2024-03-19-unsync/UDP_Bandlock_9S_Phone_BR/sm00/#01/data/diag_log_sm00_2024-03-19_18-39-12_rrc.csv"
+    sync_df, unsync_df = generate_dataframe([sync_rrc, unsync_rrc], parse_dates=['Timestamp'])
+    
+    for df in [sync_df, unsync_df]:
+        print('Timestamp_BS' not in df.columns)
+        if 'Timestamp_BS' not in df.columns:
+            df['Timestamp'] = df['Timestamp'] + pd.Timedelta(hours=8)
+        print(df.head())
+    
