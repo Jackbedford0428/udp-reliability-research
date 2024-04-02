@@ -27,8 +27,8 @@ def figure_identity():
     figure_identity.counter = getattr(figure_identity, 'counter', 0)
     now = time.time()
     date = "".join(figure_identity.timestamp_str[:10].split('-'))
-    hms_count = "".join(figure_identity.timestamp_str[11:19].split(':')) + str(figure_identity.counter).zfill(5)
-    hex_string = generate_hex_string(now)
+    hms_count = "".join(figure_identity.timestamp_str[11:16].split(':')) + str(figure_identity.counter).zfill(3)
+    hex_string = generate_hex_string(now, 5)
     figure_id = "_".join([date, hms_count, hex_string])
     figure_identity.counter += 1
     return date, hms_count, hex_string, figure_id
@@ -48,7 +48,7 @@ def model_identity():
     model_identity.timestamp_str = getattr(model_identity, 'timestamp_str', datetime_to_str(epoch_to_datetime(time.time())))
     model_identity.counter = getattr(model_identity, 'counter', 0)
     date = "".join(model_identity.timestamp_str[:10].split('-'))
-    hour_minute_count = model_identity.timestamp_str[11:13] + model_identity.timestamp_str[14:16] + str(model_identity.counter).zfill(2)
+    hour_minute_count = model_identity.timestamp_str[11:13] + model_identity.timestamp_str[14:16] + str(model_identity.counter).zfill(3)
     now = time.time()
     hex_string = generate_hex_string(now, 3)
     model_id = date + '_' + hour_minute_count + hex_string
