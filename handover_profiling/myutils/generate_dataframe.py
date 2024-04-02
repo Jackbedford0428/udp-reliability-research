@@ -11,9 +11,9 @@ __all__ = [
 ]
 
 def generate_dataframe(filepaths: Union[str, List[str]],
+                       parse_dates: Union[List[str], None] = None,
                        sep=',', header='infer', index_col=None, dtype=None,
-                       nrows=None, chunksize=None, usecols=None, low_memory=True,
-                       parse_dates: Union[List[str], None] = None):
+                       nrows=None, chunksize=None, usecols=None, low_memory=True):
     
     if isinstance(filepaths, str):
         df = pd.read_csv(filepaths, sep=sep, header=header, index_col=index_col, dtype=dtype,

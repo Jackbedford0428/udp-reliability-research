@@ -48,10 +48,10 @@ def model_identity():
     model_identity.timestamp_str = getattr(model_identity, 'timestamp_str', datetime_to_str(epoch_to_datetime(time.time())))
     model_identity.counter = getattr(model_identity, 'counter', 0)
     date = "".join(model_identity.timestamp_str[:10].split('-'))
-    hour_count = model_identity.timestamp_str[11:13] + str(model_identity.counter).zfill(3)
+    hour_minute_count = model_identity.timestamp_str[11:13] + model_identity.timestamp_str[14:16] + str(model_identity.counter).zfill(2)
     now = time.time()
-    hex_string = generate_hex_string(now, 5)
-    model_id = date + '_' + hour_count + hex_string
+    hex_string = generate_hex_string(now, 3)
+    model_id = date + '_' + hour_minute_count + hex_string
     model_identity.counter += 1
     return model_id
 
