@@ -6,6 +6,7 @@ from .time_converter import *
 from .handover_parsing import *
 from .generate_dataframe import *
 from .downsample import *
+from .getsize import *
 
 __all__ = [
     "data_loader", "data_aligner", "data_consolidator",
@@ -14,4 +15,5 @@ __all__ = [
     "mi_parse_handover",
     "generate_dataframe",
     "mean_downsample", "median_downsample",
+    "getsizeof",
 ]
