@@ -4,6 +4,7 @@ import os
 import json
 import pandas as pd
 import itertools as it
+import numpy as np
 
 __all__ = [
     "data_loader",
@@ -19,6 +20,7 @@ def data_loader(
     mode='sr', query_dates=False, show_info=False,
     selected_dates=[], selected_exps=[], selected_routes=[],
     excluded_dates=[], excluded_exps=[], excluded_routes=[],
+    selected_bands=[],
     root_dir=PATH_TO_DATABASE):
     
     # Collect experiment dates
@@ -105,19 +107,22 @@ def data_loader(
                 exp_dir = os.path.join(root_dir, date, exp_name)
                 # print({exp_name: exp})
                 
-                devices = list(exp['devices'].keys())
+                route = exp['route']
+                devices = exp['devices'].copy()
                 trips = ['#{:02d}'.format(s[0]) for s in exp['ods'][1:]]
                 for trip in trips:
-                    for dev in devices:
+                    for dev, schm in devices.items():
                         data_dir = os.path.join(exp_dir, dev, trip, 'data')
-                        filepaths.append([
-                            os.path.join(data_dir, 'handover_info_log.csv'),
-                            os.path.join(data_dir, 'udp_dnlk_loss_latency.csv'),
-                            os.path.join(data_dir, 'udp_uplk_loss_latency.csv'),
-                            os.path.join(data_dir, [s for s in os.listdir(data_dir) if s.endswith('rrc.csv')][0]),
-                            os.path.join(data_dir, [s for s in os.listdir(data_dir) if s.endswith('ml1.csv') and not s.endswith('nr_ml1.csv')][0]),
-                            os.path.join(data_dir, [s for s in os.listdir(data_dir) if s.endswith('nr_ml1.csv')][0]),
-                            ])
+                        if schm in selected_bands:
+                            filepaths.append([
+                                (dev, schm, trip, date, exp_name, route),
+                                os.path.join(data_dir, 'handover_info_log.csv'),
+                                os.path.join(data_dir, 'udp_dnlk_loss_latency.csv'),
+                                os.path.join(data_dir, 'udp_uplk_loss_latency.csv'),
+                                os.path.join(data_dir, [s for s in os.listdir(data_dir) if s.endswith('rrc.csv')][0]),
+                                os.path.join(data_dir, [s for s in os.listdir(data_dir) if s.endswith('ml1.csv') and not s.endswith('nr_ml1.csv')][0]),
+                                os.path.join(data_dir, [s for s in os.listdir(data_dir) if s.endswith('nr_ml1.csv')][0]),
+                                ])
     elif mode == 'dr':
         for date, exps in exps_dict.items():
             # print(date, len(exps))
@@ -126,24 +131,38 @@ def data_loader(
                 exp_dir = os.path.join(root_dir, date, exp_name)
                 # print({exp_name: exp})
                 
+                route = exp['route']
+                mapping = exp['devices'].copy()
                 devices = list(exp['devices'].keys())
                 combos = list(it.combinations(devices, 2))
                 trips = ['#{:02d}'.format(s[0]) for s in exp['ods'][1:]]
+                
+                selected_bands_ = [s for s in selected_bands if '+' not in s]
+                selected_combos = [s for s in selected_bands if '+' in s]
+                selected_combos_mirror = ['+'.join(s.split('+')[::-1]) for s in selected_combos]
+                selected_combos = list(set([*selected_combos, *selected_combos_mirror]))
+                selected_combos = [s for s in selected_combos if s in ['+'.join(s) for s in list(it.combinations(exp['devices'].values(), 2))]]
+                
                 for trip in trips:
                     for dev1, dev2 in combos:
                         data_dir1 = os.path.join(exp_dir, dev1, trip, 'data')
                         data_dir2 = os.path.join(exp_dir, dev2, trip, 'data')
-                        _filepaths = []
-                        for i in range(2):
-                            _filepaths.append([
-                                os.path.join(locals()[f'data_dir{i+1}'], 'handover_info_log.csv'),
-                                os.path.join(locals()[f'data_dir{i+1}'], 'udp_dnlk_loss_latency.csv'),
-                                os.path.join(locals()[f'data_dir{i+1}'], 'udp_uplk_loss_latency.csv'),
-                                os.path.join(locals()[f'data_dir{i+1}'], [s for s in os.listdir(locals()[f'data_dir{i+1}']) if s.endswith('rrc.csv')][0]),
-                                os.path.join(locals()[f'data_dir{i+1}'], [s for s in os.listdir(locals()[f'data_dir{i+1}']) if s.endswith('ml1.csv') and not s.endswith('nr_ml1.csv')][0]),
-                                os.path.join(locals()[f'data_dir{i+1}'], [s for s in os.listdir(locals()[f'data_dir{i+1}']) if s.endswith('nr_ml1.csv')][0]),
-                            ])
-                        filepaths.append(tuple(_filepaths))
+                        schm1 = mapping[dev1]
+                        schm2 = mapping[dev2]
+                        combo = '+'.join((schm1, schm2))
+                        if schm1 in selected_bands_ or schm2 in selected_bands_ or combo in selected_combos:
+                            filepaths_ = []
+                            for i in range(2):
+                                filepaths_.append([
+                                    (locals()[f'dev{i+1}'], locals()[f'schm{i+1}'], trip, date, exp_name, route),
+                                    os.path.join(locals()[f'data_dir{i+1}'], 'handover_info_log.csv'),
+                                    os.path.join(locals()[f'data_dir{i+1}'], 'udp_dnlk_loss_latency.csv'),
+                                    os.path.join(locals()[f'data_dir{i+1}'], 'udp_uplk_loss_latency.csv'),
+                                    os.path.join(locals()[f'data_dir{i+1}'], [s for s in os.listdir(locals()[f'data_dir{i+1}']) if s.endswith('rrc.csv')][0]),
+                                    os.path.join(locals()[f'data_dir{i+1}'], [s for s in os.listdir(locals()[f'data_dir{i+1}']) if s.endswith('ml1.csv') and not s.endswith('nr_ml1.csv')][0]),
+                                    os.path.join(locals()[f'data_dir{i+1}'], [s for s in os.listdir(locals()[f'data_dir{i+1}']) if s.endswith('nr_ml1.csv')][0]),
+                                ])
+                            filepaths.append(tuple(filepaths_))
     return filepaths
 
 def set_data(df, mode='pcap', tz=0):
@@ -166,16 +185,16 @@ def set_data(df, mode='pcap', tz=0):
         df[['latency']] = df[['latency']].astype('float32')
         df[['lost', 'excl']] = df[['lost', 'excl']].astype('boolean')
 
-    if mode in ['lte', 'nr']:
+    if mode in ['eutra', 'nr']:
         common_column_names = [
-            'Timestamp', 'type_id', 'PCI', 'RSRP', 'RSRQ', 'serv_cel_index', 'EARFCN', 'NR_ARFCN', 
+            'Timestamp', 'Timestamp_BS', 'type_id', 'PCI', 'RSRP', 'RSRQ', 'serv_cel_index', 'EARFCN', 'NR_ARFCN', 
             'num_cels', 'num_neigh_cels', 'serv_cel_pos', 'PCI0', 'RSRP0', 'RSRQ0',
         ]
         
         if df.empty:
             return pd.DataFrame(columns=common_column_names)
         
-        if mode == 'lte':
+        if mode == 'eutra':
             columns_mapping = {
                 'RSRP(dBm)': 'RSRP',
                 'RSRQ(dB)': 'RSRQ',
@@ -188,7 +207,7 @@ def set_data(df, mode='pcap', tz=0):
             df = df.rename(columns=columns_mapping).reindex(columns_order, axis=1)
             df['serv_cel_index'] = np.where(df['serv_cel_index'] == '(MI)Unknown', '3_SCell', df['serv_cel_index'])
             df['num_cels'] = df['num_neigh_cels'] + 1
-            df['type_id'] = 'LTE_PHY'
+            # df['type_id'] = 'LTE_PHY'
 
         if mode == 'nr':
             columns_mapping = {
@@ -202,7 +221,7 @@ def set_data(df, mode='pcap', tz=0):
             df[['PCI', 'RSRP', 'RSRQ']] = df.apply(nr_serv_cel, axis=1, result_type='expand')
             df['serv_cel_index'] = np.where(df['serv_cel_pos'] == 255, df['serv_cel_index'], 'PSCell')
             df['num_neigh_cels'] = np.where(df['serv_cel_pos'] == 255, df['num_cels'], df['num_cels'] - 1)
-            df['type_id'] = '5G_NR_ML1'
+            # df['type_id'] = '5G_NR_ML1'
         
         df['Timestamp'] = pd.to_datetime(df['Timestamp']) + pd.Timedelta(hours=tz)
         df[['type_id', 'serv_cel_index']] = df[['type_id', 'serv_cel_index']].astype('category')
