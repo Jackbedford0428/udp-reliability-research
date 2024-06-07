@@ -164,9 +164,15 @@ class DrProfile():
                 right_bound = current_right_bound
             
             interval = P.closed(left_bound, right_bound)
+            # if np.isinf(interval.upper) or np.isinf(interval.lower):
+            #     print('unknonw inf value')
+            #     continue
             
             # Consider the stable duration before an event starts
-            stable_df = this_df[this_df[self.ts_column] < interval.lower].copy()
+            try:
+                stable_df = this_df[this_df[self.ts_column] < interval.lower].copy()
+            except:
+                continue
             stable_df['Timestamp_to_sec'] = stable_df['Timestamp'].dt.floor('S')
             
             if not stable_df.empty:
@@ -272,9 +278,15 @@ class DrProfile():
                 right_bound = current_right_bound
             
             interval = P.closed(left_bound, right_bound)
+            # if np.isinf(interval.upper) or np.isinf(interval.lower):
+            #     print('unknonw inf value')
+            #     continue
             
             # Consider the stable duration before an event starts
-            stable_df = this_df[this_df[self.ts_column] < interval.lower].copy()
+            try:
+                stable_df = this_df[this_df[self.ts_column] < interval.lower].copy()
+            except:
+                continue
             stable_df['Timestamp_to_sec'] = stable_df['Timestamp'].dt.floor('S')
             
             if not stable_df.empty:
@@ -387,14 +399,19 @@ class DrProfile():
                 right_bound = current_right_bound
             
             interval = P.closed(left_bound, right_bound)
-            
-            ho_df1.loc[(ho_df1['start'] >= interval.lower) & (ho_df1['start'] < interval.upper), 'anchor_type'] = tag
-            
-            if not this_df[(this_df['Timestamp'] >= interval.lower) & (this_df['Timestamp'] < interval.upper)].empty:
-                ho_df1.loc[(ho_df1['start'] >= interval.lower) & (ho_df1['start'] < interval.upper), 'anchor_state'] = 1
+            # if np.isinf(interval.upper) or np.isinf(interval.lower):
+            #     print('unknonw inf value')
+            #     continue
+            try:
+                ho_df1.loc[(ho_df1['start'] >= interval.lower) & (ho_df1['start'] < interval.upper), 'anchor_type'] = tag
                 
-            # Update dataframe to accelerate the speed
-            this_df = this_df[this_df[self.ts_column] >= interval.upper].copy()
+                if not this_df[(this_df['Timestamp'] >= interval.lower) & (this_df['Timestamp'] < interval.upper)].empty:
+                    ho_df1.loc[(ho_df1['start'] >= interval.lower) & (ho_df1['start'] < interval.upper), 'anchor_state'] = 1
+                    
+                # Update dataframe to accelerate the speed
+                this_df = this_df[this_df[self.ts_column] >= interval.upper].copy()
+            except:
+                continue
             
         return ho_df1
     
@@ -451,18 +468,24 @@ class DrProfile():
                 right_bound = current_right_bound
             
             interval = P.closed(left_bound, right_bound)
+            # if np.isinf(interval.upper) or np.isinf(interval.lower):
+            #     print('unknonw inf value')
+            #     continue
             
             anchor_tag = row['anchor_type']
             anchor_state = row['anchor_state']
             
-            self.corr_data[(anchor_tag, tag)][0].append(anchor_state)
-            if not this_df[(this_df['Timestamp'] >= interval.lower) & (this_df['Timestamp'] < interval.upper)].empty:
-                self.corr_data[(anchor_tag, tag)][1].append(1)
-            else:
-                self.corr_data[(anchor_tag, tag)][1].append(0)
-                
-            # Update dataframe to accelerate the speed
-            this_df = this_df[this_df[self.ts_column] >= interval.upper].copy()
+            try:
+                self.corr_data[(anchor_tag, tag)][0].append(anchor_state)
+                if not this_df[(this_df['Timestamp'] >= interval.lower) & (this_df['Timestamp'] < interval.upper)].empty:
+                    self.corr_data[(anchor_tag, tag)][1].append(1)
+                else:
+                    self.corr_data[(anchor_tag, tag)][1].append(0)
+                    
+                # Update dataframe to accelerate the speed
+                this_df = this_df[this_df[self.ts_column] >= interval.upper].copy()
+            except:
+                continue
             
     
     def construct_profile(self):
@@ -693,7 +716,7 @@ class DrProfile():
     
             
     def save_models(self):
-        save_path = os.path.join(self.save_path, self.sr_model_name, self.dr_model_name, self.dirc_mets, 'models')
+        save_path = os.path.join(self.save_path, self.sr_model_name, 'train', self.dr_model_name, self.dirc_mets, 'models')
         if not os.path.isdir(save_path):
             os.makedirs(save_path)
             
@@ -702,12 +725,12 @@ class DrProfile():
         
         save_path = os.path.join(save_path, self.model_prefix)
         
-        with open(f'{save_path}_dr_prob_models.pkl', 'wb') as f:
+        with open(f'{save_path}_dr_prob_models_mle.pkl', 'wb') as f:
             pickle.dump(self.dr_prob_models, f)
         with open(f'{save_path}_dr_prob_models_adjust.pkl', 'wb') as f:
             pickle.dump(self.dr_prob_models_adjust, f)
             
-        self.dr_prob_models_table.to_csv(f'{save_path}_dr_prob_models_table.csv')
+        self.dr_prob_models_table.to_csv(f'{save_path}_dr_prob_models_mle_table.csv')
         self.dr_prob_models_adjust_table.to_csv(f'{save_path}_dr_prob_models_adjust_table.csv')
     
     

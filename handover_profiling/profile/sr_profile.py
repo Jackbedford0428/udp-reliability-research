@@ -246,9 +246,15 @@ class Profile():
                 right_bound = current_right_bound
             
             interval = P.closed(left_bound, right_bound)
+            # if np.isinf(interval.upper) or np.isinf(interval.lower):
+            #     print('unknonw inf value')
+            #     continue
 
             # Consider the stable duration before an event starts
-            stable_df = this_df[this_df[self.ts_column] < interval.lower].copy()
+            try:
+                stable_df = this_df[this_df[self.ts_column] < interval.lower].copy()
+            except:
+                continue
             stable_df['Timestamp_to_sec'] = stable_df['Timestamp'].dt.floor('S')
             
             if not stable_df.empty:
@@ -543,7 +549,7 @@ class Profile():
             plt.tight_layout()
             plt.gcf().autofmt_xdate()
             
-            save_path = os.path.join(self.save_path, self.model_name, 'sr', self.dirc_mets, 'models', 'plot')
+            save_path = os.path.join(self.save_path, self.model_name, 'train', 'sr', self.dirc_mets, 'models', 'plot')
             if not os.path.isdir(save_path):
                 os.makedirs(save_path)
             
@@ -560,7 +566,7 @@ class Profile():
     
     
     def save_models(self):
-        save_path = os.path.join(self.save_path, self.model_name, 'sr', self.dirc_mets, 'models')
+        save_path = os.path.join(self.save_path, self.model_name, 'train', 'sr', self.dirc_mets, 'models')
         if not os.path.isdir(save_path):
             os.makedirs(save_path)
         

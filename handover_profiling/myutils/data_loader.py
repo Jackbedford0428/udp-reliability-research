@@ -4,6 +4,8 @@ import os
 import json
 import pandas as pd
 import itertools as it
+import yaml
+from pprint import pprint
 
 __all__ = [
     "data_loader",
@@ -64,13 +66,20 @@ def data_loader(
     
     for date_dir in date_dirs:
         date = os.path.basename(date_dir)
-                
-        # Specify path to JSON file
-        json_filepath = os.path.join(date_dir, f'{date}.json')
         
-        # Read the JSON file and load its contents into a dictionary
-        with open(json_filepath, 'r', encoding='utf-8') as json_file:
-            my_dict = json.load(json_file)
+        try:
+            yaml_filepath = os.path.join(date_dir, f'{date}.yml')
+            with open(yaml_filepath, 'r', encoding='utf-8') as yaml_file:
+                my_dict = yaml.safe_load(yaml_file)
+            # pprint(my_dict)
+        
+        except:
+            # Specify path to JSON file
+            json_filepath = os.path.join(date_dir, f'{date}.json')
+            
+            # Read the JSON file and load its contents into a dictionary
+            with open(json_filepath, 'r', encoding='utf-8') as json_file:
+                my_dict = json.load(json_file)
         
         # If the JSON file is empty, then continue
         if not my_dict:
@@ -106,7 +115,10 @@ def data_loader(
                 # print({exp_name: exp})
                 
                 devices = list(exp['devices'].keys())
-                trips = ['#{:02d}'.format(s[0]) for s in exp['ods'][1:]]
+                try:
+                    trips = ['#{:02d}'.format(s[0]) for s in exp['ods'][1:]]
+                except:
+                    trips = ['#{:02d}'.format(s) for s in list(exp['ods'].keys())[1:]]
                 for trip in trips:
                     for dev in devices:
                         data_dir = os.path.join(exp_dir, dev, trip, 'data')
@@ -128,7 +140,10 @@ def data_loader(
                 
                 devices = list(exp['devices'].keys())
                 combos = list(it.combinations(devices, 2))
-                trips = ['#{:02d}'.format(s[0]) for s in exp['ods'][1:]]
+                try:
+                    trips = ['#{:02d}'.format(s[0]) for s in exp['ods'][1:]]
+                except:
+                    trips = ['#{:02d}'.format(s) for s in list(exp['ods'].keys())[1:]]
                 for trip in trips:
                     for dev1, dev2 in combos:
                         data_dir1 = os.path.join(exp_dir, dev1, trip, 'data')
