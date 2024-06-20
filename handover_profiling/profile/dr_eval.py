@@ -8,7 +8,8 @@ import portion as P
 import matplotlib.pyplot as plt
 from scipy.stats import gaussian_kde
 from sklearn.metrics import mean_squared_error
-from tqdm.notebook import tqdm
+# from tqdm.notebook import tqdm
+from tqdm import tqdm
 from myutils import *
 from scipy.stats import kendalltau
 
