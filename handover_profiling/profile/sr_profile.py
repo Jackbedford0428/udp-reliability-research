@@ -6,7 +6,8 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import portion as P
-from tqdm.notebook import tqdm
+# from tqdm.notebook import tqdm
+from tqdm import tqdm
 from scipy.stats import gaussian_kde
 from scipy.integrate import quad
 from myutils import *
@@ -65,7 +66,7 @@ class Profile():
         
         # Building Model
         epoch_mapping = {0: '1st', 1: '2nd', 2: '3rd', 3: '4th', 4: '5th'}
-        for epoch in tqdm(range(epochs), ncols=1000):
+        for epoch in tqdm(range(epochs)):
             
             if epoch == epochs - 1:
                 self.epoch = 'last'
@@ -82,7 +83,8 @@ class Profile():
             print('Size of Profiles:', getsizeof(self.Profile))
             print('Total Size:', getsizeof(self))
             
-            self.plot()
+            if self.epoch == 'last':
+                self.plot()
         
         self.save_models()
         
@@ -246,9 +248,15 @@ class Profile():
                 right_bound = current_right_bound
             
             interval = P.closed(left_bound, right_bound)
+            # if np.isinf(interval.upper) or np.isinf(interval.lower):
+            #     print('unknonw inf value')
+            #     continue
 
             # Consider the stable duration before an event starts
-            stable_df = this_df[this_df[self.ts_column] < interval.lower].copy()
+            try:
+                stable_df = this_df[this_df[self.ts_column] < interval.lower].copy()
+            except:
+                continue
             stable_df['Timestamp_to_sec'] = stable_df['Timestamp'].dt.floor('S')
             
             if not stable_df.empty:
@@ -327,7 +335,7 @@ class Profile():
         n = len(self.filepaths)
         for i, filepath in enumerate(self.filepaths):
             
-            if self.test_mode and i > 1:
+            if self.test_mode and i > 0:
                 break
             
             path = filepath[1] if dirc == 'dl' else filepath[2]
@@ -522,7 +530,8 @@ class Profile():
             trigger = sum(self.Profile[tag]['trigger_loex'])
             trigger_rate = round(self.prob_models[tag] * 100, 1)
             LossR = round(sum(table[mets]) / (sum(table['tx_count']) + 1e-9) * 100, 2)
-            ax.text(left+0.06*(right-left), bottom+0.73*(top-bottom), f'Event Count: {count}\nTrigger Loss: {trigger} ({trigger_rate}%)\nAvg {RATE_TYPE}: {LossR}%\nAvg INTR: {intr} (sec)', ha='left', fontweight='bold', fontsize=10)
+            LossR_ = round(LossR * trigger_rate / 100, 2)
+            ax.text(left+0.06*(right-left), bottom+0.73*(top-bottom), f'Event Count: {count}\nTrigger Loss: {trigger} ({trigger_rate}%)\nAvg {RATE_TYPE}: {LossR}% ({LossR_}%)\nAvg INTR: {intr} (sec)', ha='left', fontweight='bold', fontsize=10)
             
             if self.epoch == 'last':
                 ax.set_title(f'{DIRC_TYPE} {RATE_TYPE}: {tag} | {self.model_prefix}')
@@ -543,7 +552,7 @@ class Profile():
             plt.tight_layout()
             plt.gcf().autofmt_xdate()
             
-            save_path = os.path.join(self.save_path, self.model_name, 'sr', self.dirc_mets, 'models', 'plot')
+            save_path = os.path.join(self.save_path, self.model_name, 'train', 'sr', self.dirc_mets, 'models', 'plot')
             if not os.path.isdir(save_path):
                 os.makedirs(save_path)
             
@@ -560,7 +569,7 @@ class Profile():
     
     
     def save_models(self):
-        save_path = os.path.join(self.save_path, self.model_name, 'sr', self.dirc_mets, 'models')
+        save_path = os.path.join(self.save_path, self.model_name, 'train', 'sr', self.dirc_mets, 'models')
         if not os.path.isdir(save_path):
             os.makedirs(save_path)
         

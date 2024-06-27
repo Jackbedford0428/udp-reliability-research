@@ -4,9 +4,12 @@ import os
 import json
 import pandas as pd
 import itertools as it
+import yaml
+from pprint import pprint
 
 __all__ = [
     "data_loader",
+    "set_data",
     "data_aligner",
     "data_consolidator",
 ]
@@ -63,13 +66,20 @@ def data_loader(
     
     for date_dir in date_dirs:
         date = os.path.basename(date_dir)
-                
-        # Specify path to JSON file
-        json_filepath = os.path.join(date_dir, f'{date}.json')
         
-        # Read the JSON file and load its contents into a dictionary
-        with open(json_filepath, 'r', encoding='utf-8') as json_file:
-            my_dict = json.load(json_file)
+        try:
+            yaml_filepath = os.path.join(date_dir, f'{date}.yml')
+            with open(yaml_filepath, 'r', encoding='utf-8') as yaml_file:
+                my_dict = yaml.safe_load(yaml_file)
+            # pprint(my_dict)
+        
+        except:
+            # Specify path to JSON file
+            json_filepath = os.path.join(date_dir, f'{date}.json')
+            
+            # Read the JSON file and load its contents into a dictionary
+            with open(json_filepath, 'r', encoding='utf-8') as json_file:
+                my_dict = json.load(json_file)
         
         # If the JSON file is empty, then continue
         if not my_dict:
@@ -105,7 +115,10 @@ def data_loader(
                 # print({exp_name: exp})
                 
                 devices = list(exp['devices'].keys())
-                trips = ['#{:02d}'.format(s[0]) for s in exp['ods'][1:]]
+                try:
+                    trips = ['#{:02d}'.format(s[0]) for s in exp['ods'][1:]]
+                except:
+                    trips = ['#{:02d}'.format(s) for s in list(exp['ods'].keys())[1:]]
                 for trip in trips:
                     for dev in devices:
                         data_dir = os.path.join(exp_dir, dev, trip, 'data')
@@ -127,7 +140,10 @@ def data_loader(
                 
                 devices = list(exp['devices'].keys())
                 combos = list(it.combinations(devices, 2))
-                trips = ['#{:02d}'.format(s[0]) for s in exp['ods'][1:]]
+                try:
+                    trips = ['#{:02d}'.format(s[0]) for s in exp['ods'][1:]]
+                except:
+                    trips = ['#{:02d}'.format(s) for s in list(exp['ods'].keys())[1:]]
                 for trip in trips:
                     for dev1, dev2 in combos:
                         data_dir1 = os.path.join(exp_dir, dev1, trip, 'data')
@@ -144,6 +160,77 @@ def data_loader(
                             ])
                         filepaths.append(tuple(_filepaths))
     return filepaths
+
+def set_data(df, mode='pcap', tz=0):
+    def nr_serv_cel(row):
+        pos = row.serv_cel_pos
+        if pos == 255:
+            return 65535, -160, -50
+        else:
+            return row[f'PCI{pos}'], row[f'RSRP{pos}'], row[f'RSRQ{pos}']
+    
+    if mode == 'pcap':
+        common_column_names = ['seq', 'rpkg', 'frame_id', 'Timestamp', 'lost', 'excl', 'latency', 'xmit_time', 'arr_time']
+        
+        if df.empty:
+            return pd.DataFrame(columns=common_column_names)
+        
+        date_columns = ['Timestamp', 'xmit_time', 'arr_time']
+        df[date_columns] = df[date_columns].apply(pd.to_datetime)
+        df[['seq', 'rpkg', 'frame_id']] = df[['seq', 'rpkg', 'frame_id']].astype('Int32')
+        df[['latency']] = df[['latency']].astype('float32')
+        df[['lost', 'excl']] = df[['lost', 'excl']].astype('boolean')
+
+    if mode in ['lte', 'nr']:
+        common_column_names = [
+            'Timestamp', 'type_id', 'PCI', 'RSRP', 'RSRQ', 'serv_cel_index', 'EARFCN', 'NR_ARFCN', 
+            'num_cels', 'num_neigh_cels', 'serv_cel_pos', 'PCI0', 'RSRP0', 'RSRQ0',
+        ]
+        
+        if df.empty:
+            return pd.DataFrame(columns=common_column_names)
+        
+        if mode == 'lte':
+            columns_mapping = {
+                'RSRP(dBm)': 'RSRP',
+                'RSRQ(dB)': 'RSRQ',
+                'Serving Cell Index': 'serv_cel_index',
+                'Number of Neighbor Cells': 'num_neigh_cels',
+                'Number of Detected Cells': 'num_cels',
+            }
+            columns_order = [*common_column_names, *df.columns[df.columns.get_loc('PCI1'):].tolist()]
+            
+            df = df.rename(columns=columns_mapping).reindex(columns_order, axis=1)
+            df['serv_cel_index'] = np.where(df['serv_cel_index'] == '(MI)Unknown', '3_SCell', df['serv_cel_index'])
+            df['num_cels'] = df['num_neigh_cels'] + 1
+            df['type_id'] = 'LTE_PHY'
+
+        if mode == 'nr':
+            columns_mapping = {
+                'Raster ARFCN': 'NR_ARFCN',
+                'Serving Cell Index': 'serv_cel_pos',
+                'Num Cells': 'num_cels',
+            }
+            columns_order = [*common_column_names, *df.columns[df.columns.get_loc('PCI1'):].tolist()]
+            
+            df = df.rename(columns=columns_mapping).reindex(columns_order, axis=1)
+            df[['PCI', 'RSRP', 'RSRQ']] = df.apply(nr_serv_cel, axis=1, result_type='expand')
+            df['serv_cel_index'] = np.where(df['serv_cel_pos'] == 255, df['serv_cel_index'], 'PSCell')
+            df['num_neigh_cels'] = np.where(df['serv_cel_pos'] == 255, df['num_cels'], df['num_cels'] - 1)
+            df['type_id'] = '5G_NR_ML1'
+        
+        df['Timestamp'] = pd.to_datetime(df['Timestamp']) + pd.Timedelta(hours=tz)
+        df[['type_id', 'serv_cel_index']] = df[['type_id', 'serv_cel_index']].astype('category')
+        df[['EARFCN', 'NR_ARFCN']] = df[['EARFCN', 'NR_ARFCN']].astype('Int32')
+        df[['num_cels', 'num_neigh_cels', 'serv_cel_pos']] = df[['num_cels', 'num_neigh_cels', 'serv_cel_pos']].astype('UInt8')
+
+        for tag in df.columns:
+            if tag.startswith('PCI'):
+                df[tag] = df[tag].astype('Int32')
+            if tag.startswith(('RSRP', 'RSRQ')):
+                df[tag] = df[tag].astype('float32')
+
+    return df
 
 def data_aligner(df, ho_df):
     empty_data = False

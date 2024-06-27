@@ -8,8 +8,10 @@ import portion as P
 import matplotlib.pyplot as plt
 from scipy.stats import gaussian_kde
 from sklearn.metrics import mean_squared_error
-from tqdm.notebook import tqdm
+# from tqdm.notebook import tqdm
+from tqdm import tqdm
 from myutils import *
+from scipy.stats import kendalltau
 
 __all__ = [
     "DrEval",
@@ -21,7 +23,8 @@ class DrEval:
         sr_model_id=None, sr_model_dscp=None, dr_model_id=None, dr_model_dscp=None,
         load_path='.', save_path='.', path2results=None, dirc_mets='dl_lost',
         sp_columns=['type'], ts_column='Timestamp', w_size=0.01,
-        save_answer=False, anchor_mode='by_event', test_mode=False
+        save_answer=False, anchor_mode='by_event', test_mode=False,
+        dataset_type='train',
     ):
         
         if sr_model_id is None:
@@ -37,6 +40,7 @@ class DrEval:
         self.dr_model_name = dr_model_id if dr_model_dscp is None else dr_model_id + '_' + dr_model_dscp
         self.model_prefix = model_prefix
         self.model_corr = model_corr
+        self.dataset_type = dataset_type
         
         self.dirc_mets = dirc_mets
         self.dirc, self.mets = dirc_mets[:2], dirc_mets[-4:]
@@ -50,7 +54,7 @@ class DrEval:
         self.save_path = save_path
         print(self.save_path, self.sr_model_name, self.dr_model_name, self.model_prefix, self.dirc_mets)
         
-        self.sr_load_path = os.path.join(load_path, self.sr_model_name, 'sr', self.dirc_mets, 'models', self.model_prefix)
+        self.sr_load_path = os.path.join(load_path, self.sr_model_name, 'train', 'sr', self.dirc_mets, 'models', self.model_prefix)
         print(self.sr_load_path)
         
         if path2results is None:
@@ -85,10 +89,10 @@ class DrEval:
             with open(f'{self.sr_load_path}_sr_prob_models.pkl', 'rb') as f:
                 self.sr_prob_models = pickle.load(f)
         
-        self.dr_load_path = os.path.join(load_path, self.sr_model_name, self.dr_model_name, self.dirc_mets, 'models', self.model_prefix)
+        self.dr_load_path = os.path.join(load_path, self.sr_model_name, 'train', self.dr_model_name, self.dirc_mets, 'models', self.model_prefix)
         print(self.dr_load_path)
         
-        dr_prob_models_filepath = f'{self.dr_load_path}_dr_prob_models.pkl' if self.model_corr is None else f'{self.dr_load_path}_dr_prob_models_{self.model_corr}.pkl'
+        dr_prob_models_filepath = f'{self.dr_load_path}_dr_prob_models_mle.pkl' if self.model_corr is None else f'{self.dr_load_path}_dr_prob_models_{self.model_corr}.pkl'
         print(dr_prob_models_filepath)
         try:
             with open(dr_prob_models_filepath, 'rb') as f:
@@ -99,7 +103,7 @@ class DrEval:
         
         self.date, self.hms_count, self.hex_string, self.figure_id = figure_identity()
         if self.model_corr is None:
-            self.save_name = f'{self.model_prefix}_{self.date}_{self.hms_count}_{self.hex_string}'
+            self.save_name = f'{self.model_prefix}_mle_{self.date}_{self.hms_count}_{self.hex_string}'
         else:
             self.save_name = f'{self.model_prefix}_{self.model_corr}_{self.date}_{self.hms_count}_{self.hex_string}'
         
@@ -173,9 +177,15 @@ class DrEval:
                 right_bound = current_right_bound
             
             interval = P.closed(left_bound, right_bound)
+            # if np.isinf(interval.upper) or np.isinf(interval.lower):
+            #     print('unknonw inf value')
+            #     continue
             
             # Concatenate PLR from mapping list
-            current_df = this_df[this_df['Timestamp'] < interval.upper].copy()
+            try:
+                current_df = this_df[this_df['Timestamp'] < interval.upper].copy()
+            except:
+                continue
             plr_mapping = hist_model[tag].copy()
             
             current_df[f'relative_time'] = (current_df['Timestamp'] - start_ts).dt.total_seconds()
@@ -320,9 +330,15 @@ class DrEval:
                 right_bound = current_right_bound
             
             interval = P.closed(left_bound, right_bound)
+            # if np.isinf(interval.upper) or np.isinf(interval.lower):
+            #     print('unknonw inf value')
+            #     continue
             
             # Consider the stable duration before an event starts
-            stable_df = this_df[this_df[self.ts_column] < interval.lower].copy()
+            try:
+                stable_df = this_df[this_df[self.ts_column] < interval.lower].copy()
+            except:
+                continue
             stable_df['Timestamp_to_sec'] = stable_df['Timestamp'].dt.floor('S')
             
             if not stable_df.empty:
@@ -431,9 +447,15 @@ class DrEval:
                 right_bound = current_right_bound
             
             interval = P.closed(left_bound, right_bound)
+            # if np.isinf(interval.upper) or np.isinf(interval.lower):
+            #     print('unknonw inf value')
+            #     continue
             
             # Consider the stable duration before an event starts
-            stable_df = this_df[this_df[self.ts_column] < interval.lower].copy()
+            try:
+                stable_df = this_df[this_df[self.ts_column] < interval.lower].copy()
+            except:
+                continue
             stable_df['Timestamp_to_sec'] = stable_df['Timestamp'].dt.floor('S')
             
             if not stable_df.empty:
@@ -617,14 +639,20 @@ class DrEval:
                 right_bound = current_right_bound
             
             interval = P.closed(left_bound, right_bound)
+            # if np.isinf(interval.upper) or np.isinf(interval.lower):
+            #     print('unknonw inf value')
+            #     continue
             
-            ho_df1.loc[(ho_df1['start'] >= interval.lower) & (ho_df1['start'] < interval.upper), 'anchor_type'] = tag
-            
-            if not this_df[(this_df['Timestamp'] >= interval.lower) & (this_df['Timestamp'] < interval.upper)].empty:
-                ho_df1.loc[(ho_df1['start'] >= interval.lower) & (ho_df1['start'] < interval.upper), 'anchor_state'] = 1
+            try:
+                ho_df1.loc[(ho_df1['start'] >= interval.lower) & (ho_df1['start'] < interval.upper), 'anchor_type'] = tag
                 
-            # Update dataframe to accelerate the speed
-            this_df = this_df[this_df[self.ts_column] >= interval.upper].copy()
+                if not this_df[(this_df['Timestamp'] >= interval.lower) & (this_df['Timestamp'] < interval.upper)].empty:
+                    ho_df1.loc[(ho_df1['start'] >= interval.lower) & (ho_df1['start'] < interval.upper), 'anchor_state'] = 1
+                    
+                # Update dataframe to accelerate the speed
+                this_df = this_df[this_df[self.ts_column] >= interval.upper].copy()
+            except:
+                continue
             
         return ho_df1
     
@@ -681,9 +709,15 @@ class DrEval:
                 right_bound = current_right_bound
             
             interval = P.closed(left_bound, right_bound)
+            # if np.isinf(interval.upper) or np.isinf(interval.lower):
+            #     print('unknonw inf value')
+            #     continue
             
             # Concatenate PLR from mapping list
-            current_df = this_df[this_df['Timestamp'] < interval.upper].copy()
+            try:
+                current_df = this_df[this_df['Timestamp'] < interval.upper].copy()
+            except:
+                continue
             plr_mapping = hist_model[tag].copy()
             
             current_df[f'relative_time'] = (current_df['Timestamp'] - start_ts).dt.total_seconds()
@@ -839,7 +873,8 @@ class DrEval:
             # Start processing...
             loss_rate_list = []
             answer = None
-            for iter_round in tqdm(range(N), ncols=1000):
+            # for iter_round in tqdm(range(N), ncols=1000):
+            for iter_round in range(N):
                 ans1, _, _ = self.hist_method_anchor(df1, ho_df1)
                 
                 if self.anchor_mode == 'by_packet':
@@ -917,7 +952,8 @@ class DrEval:
             
             # Save Answers
             if self.save_answer:
-                save_path = os.path.join(self.path2results, self.sr_model_name, self.dr_model_name, self.dirc_mets, f'{self.save_name}_iter{N}')
+                # save_path = os.path.join(self.path2results, self.sr_model_name, self.dr_model_name, self.dirc_mets, f'{self.save_name}_iter{N}')
+                save_path = os.path.join(self.path2results, self.sr_model_name, self.dataset_type, self.dr_model_name, self.dirc_mets, f'{self.save_name}_iter{N}')
                 if not os.path.isdir(save_path):
                     os.makedirs(save_path)
                     
@@ -927,7 +963,8 @@ class DrEval:
                 answer.to_csv(save_path, index=False)
             
             # Save Results
-            save_path = os.path.join(self.save_path, self.sr_model_name, self.dr_model_name, self.dirc_mets, 'results')
+            # save_path = os.path.join(self.save_path, self.sr_model_name, self.dr_model_name, self.dirc_mets, 'results')
+            save_path = os.path.join(self.save_path, self.sr_model_name, self.dataset_type, self.dr_model_name, self.dirc_mets, 'results')
             if not os.path.isdir(save_path):
                 os.makedirs(save_path)
                 
@@ -944,21 +981,23 @@ class DrEval:
     def plot(self, title=None):
         RATE_TYPE = self.RATE_TYPE
         
-        if title == None:
-            if self.model_corr == None:
-                title = f'DR {self.DIRC_TYPE} {self.RATE_TYPE} | {self.model_prefix}'
+        if title is None:
+            if self.model_corr is None:
+                title = f'DR {self.DIRC_TYPE} {self.RATE_TYPE} | {self.model_prefix} (MLE)'
             elif self.model_corr == 'adjust':
                 suffix = self.model_corr.capitalize()
                 title = f'DR {self.DIRC_TYPE} {self.RATE_TYPE} | {self.model_prefix} ({suffix})'
             else:
                 mode = self.model_corr.split('_')[0]
-                suffix = mode.capitalize() + ' ' + 'Corr-coef'
+                suffix = mode.capitalize() + ' ' + 'C.C.'
                 title = f'DR {self.DIRC_TYPE} {self.RATE_TYPE} | {self.model_prefix} ({suffix})'
         
         # Sample data
         x = [s[3] for s in self.records]  # Ground truths
         y = [s[1] for s in self.records]  # Mean values for evaluation
         y_error = [s[2] for s in self.records]  # Standard deviations for error bars
+        
+        tau, p_value = kendalltau(x, y)
 
         # Create figure and axes
         fig, ax = plt.subplots(figsize=(6, 4))
@@ -971,7 +1010,15 @@ class DrEval:
         rmse = np.sqrt(mean_squared_error(x, y))
         rmse_rate = rmse / np.mean(x) * 100
         slope_annotation = f'RMSE: {rmse:.3f} ({rmse_rate:.1f} %)'
-        ax.annotate(slope_annotation, xy=(0.5, 0.85), xycoords='axes fraction', fontsize=10, fontstyle='italic', fontweight='bold', color='tab:blue')
+        ax.annotate(slope_annotation, xy=(0.45, 0.85), xycoords='axes fraction', fontsize=13, fontstyle='italic', fontweight='bold', color='black')
+        slope_annotation = f'τ (p.v.): {tau:.2f} ({p_value:.3f})'
+        ax.annotate(slope_annotation, xy=(0.45, 0.80), xycoords='axes fraction', fontsize=13, fontstyle='italic', fontweight='bold', color='black')
+        
+        x_limits = ax.get_xlim()
+        y_limits = ax.get_ylim()
+        
+        ax.set_xlim(0, max(x_limits[1], y_limits[1]))
+        ax.set_ylim(0, max(x_limits[1], y_limits[1]))
 
         # 45-Degree Line
         ax.plot(ax.get_xlim(), ax.get_xlim(), linestyle='-', linewidth=1.1, color='tab:pink', label='45-Degree Line', alpha=0.9)
@@ -985,7 +1032,7 @@ class DrEval:
         y_lower = 0.9 * x_values
         
         # 绘制 y = 1.1x 和 y = 0.9x 线
-        ax.plot(x_values, y_upper, linestyle='-', linewidth=1.1, color='tab:orange')
+        ax.plot(x_values, y_upper, linestyle='-', linewidth=1.1, color='tab:orange', label='10%-Bound')
         ax.plot(x_values, y_lower, linestyle='-', linewidth=1.1, color='tab:orange')
         ax.fill_between(x_values, y_lower, y_upper, color='tab:orange', alpha=0.3)  # 在两条线之间填充颜色
 
@@ -995,19 +1042,21 @@ class DrEval:
         if title is not None:
             ax.set_title(title)
 
-        devices = [s[5] for s in self.records]
-        for i, sm_label in enumerate(devices):
-            ax.annotate(sm_label, xy=(x[i], y[i]))
+        # devices = [s[5] for s in self.records]
+        # for i, sm_label in enumerate(devices):
+        #     ax.annotate(sm_label, xy=(x[i], y[i]))
             
         # Add a legend
         ax.legend()
-        fig.set_size_inches(5.5, 4)
+        fig.set_size_inches(6, 6)  # square figure
+        ax.set_aspect('equal')
         
         plt.tight_layout()
         plt.gcf().autofmt_xdate()
         
         # Save figure
-        save_path = os.path.join(self.save_path, self.sr_model_name, self.dr_model_name, self.dirc_mets, 'figures')
+        # save_path = os.path.join(self.save_path, self.sr_model_name, self.dr_model_name, self.dirc_mets, 'figures')
+        save_path = os.path.join(self.save_path, self.sr_model_name, self.dataset_type, self.dr_model_name, self.dirc_mets, 'figures')
         if not os.path.isdir(save_path):
             os.makedirs(save_path)
         save_path = os.path.join(save_path, f'{self.save_name}_iter{self.iter_num}.png')
