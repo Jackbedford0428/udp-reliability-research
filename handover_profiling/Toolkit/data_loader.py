@@ -6,6 +6,7 @@ import pandas as pd
 import itertools as it
 import yaml
 from pprint import pprint
+from collections import defaultdict
 
 __all__ = [
     "data_loader",
@@ -15,95 +16,123 @@ __all__ = [
 ]
 
 with open(os.path.join(os.path.dirname(__file__), "db_path.txt"), "r") as f:
-    PATH_TO_DATABASE = f.readline()
+    PATHS_TO_DATABASE = [s.strip() for s in f.readlines()]
 
 def data_loader(
-    mode='sr', query_dates=False, show_info=False,
+    mode='sr', query_dates=False, verbose=False,
+    ue = 'any',
     selected_dates=[], selected_exps=[], selected_routes=[],
     excluded_dates=[], excluded_exps=[], excluded_routes=[],
-    root_dir=PATH_TO_DATABASE):
+    root_paths=PATHS_TO_DATABASE):
     
     # Collect experiment dates
-    dates = [s for s in sorted(os.listdir(root_dir)) if os.path.isdir(os.path.join(root_dir, s)) and s not in ['backup']]
-    
     if query_dates:
-        if show_info:
-            star_flag = True
-            date_dirs = [os.path.join(root_dir, s) for s in dates]
-            for date, date_dir in zip(dates, date_dirs):
-                date = os.path.basename(date_dir)
-                
-                # Specify path to JSON file
-                json_filepath = os.path.join(date_dir, f'{date}.json')
-                
-                if not os.path.isfile(json_filepath):
-                    if star_flag:
-                        print('*************************************************************************************')
-                        star_flag = False
-                    print(f'{json_filepath} does not exist!!!')
-                    print('*************************************************************************************')
-                    continue
+        
+        dates = []
+        dates_verbose_lst = []
+        
+        for root_path in root_paths:
+            dates = dates + [s for s in sorted(os.listdir(root_path)) if os.path.isdir(os.path.join(root_path, s))]
+            dates_verbose_lst = dates_verbose_lst + [[s, root_path] for s in sorted(os.listdir(root_path)) if os.path.isdir(os.path.join(root_path, s))]
+        
+        unique_dates = sorted(list(set(dates)))
+        
+        date_dict = defaultdict(set)  # 使用 set 來自動去除重複的資料夾
+
+        for date, folder in dates_verbose_lst:
+            date_dict[date].add(folder)
+
+        # 如果你需要將 set 轉換回 list (可選，視你需求而定)
+        dates_verbose = {key: list(value) for key, value in date_dict.items()}
+        dates_verbose = dict(sorted(dates_verbose.items(), key=lambda x: x[0]))
+        
+        if verbose:
+            for date, folders in dates_verbose.items():
+                if len(folders) > 1:
+                    print(date, end=' ')
+                    for folder in folders:
+                        print(folder, end=' ')
+                    print()
                 else:
-                    star_flag = True
-                
-                # Read the JSON file and load its contents into a dictionary
-                with open(json_filepath, 'r', encoding='utf-8') as json_file:
-                    my_dict = json.load(json_file)
-                
-                # If the JSON file is empty, then continue
-                if not my_dict:
-                    continue
-                
-                print(date, len(my_dict))
-                for exp, item in my_dict.items():
-                    print({exp: item})
-                
-        return dates
-    
+                    print(date, folders[0])
+                    
+        return unique_dates
+
     # Collect experiments
-    date_dirs = [os.path.join(root_dir, s) for s in selected_dates if s not in excluded_dates]
+    date_paths = []
+    
+    for date in selected_dates:
+        not_found = []
+        
+        if date in excluded_dates:
+            continue
+        
+        for root_path in root_paths:
+            date_path = os.path.join(root_path, date)
+            if os.path.isdir(date_path):
+                date_paths.append(date_path)
+            else:
+                not_found.append(date_path)
+        
+        if len(not_found) == len(root_paths):
+            error_message = "[Errno 2] No such file or directory:\n"
+            for date_path in not_found:
+                error_message += "  '{}'\n".format(date_path)
+            raise FileNotFoundError(error_message.strip())
+    
     exps_dict = {}
     
-    for date_dir in date_dirs:
-        date = os.path.basename(date_dir)
+    for date_path in date_paths:
+        if verbose:
+            print('------------------')
+            print(os.path.basename(date_path), os.path.dirname(date_path))
         
-        try:
-            yaml_filepath = os.path.join(date_dir, f'{date}.yml')
-            with open(yaml_filepath, 'r', encoding='utf-8') as yaml_file:
-                my_dict = yaml.safe_load(yaml_file)
-            # pprint(my_dict)
+        yaml_filepath = os.path.join(date_path, os.path.basename(date_path) + '.yml')
+        with open(yaml_filepath, 'r', encoding='utf-8') as yaml_file:
+            my_dict = yaml.safe_load(yaml_file)
         
-        except:
-            # Specify path to JSON file
-            json_filepath = os.path.join(date_dir, f'{date}.json')
-            
-            # Read the JSON file and load its contents into a dictionary
-            with open(json_filepath, 'r', encoding='utf-8') as json_file:
-                my_dict = json.load(json_file)
-        
-        # If the JSON file is empty, then continue
+        # If the YAML file is empty, then continue
         if not my_dict:
             continue
         
-        for i, (exp, item) in enumerate(my_dict.items()):
-            if len(selected_exps) != 0 and exp not in selected_exps:
+        date = os.path.basename(date_path)
+        
+        for exp_name, exp in my_dict.items():
+            if verbose:
+                print(' ', exp_name, '->', 'Skip:', exp['skip'], '|', 'UE:', exp['ue'], '|', 'Laptop:', exp['laptop'], '|', 'Route:', exp['route'])
+                print('   ', exp['devices'])
+                
+            if ue == 'any':
+                if exp['skip']:
+                    continue
+            else:
+                if exp['skip'] and exp['ue'] != ue:  # Phone or Modem
+                    continue
+            
+            if len(selected_exps) != 0 and exp_name not in selected_exps:
                 continue
-            if len(excluded_exps) != 0 and exp in excluded_exps:
+            if len(excluded_exps) != 0 and exp_name in excluded_exps:
                 continue
-            if len(selected_routes) != 0 and item['route'] not in selected_routes:
+            if len(selected_routes) != 0 and exp['route'] not in selected_routes:
                 continue
-            if len(excluded_routes) != 0 and item['route'] in excluded_routes:
+            if len(excluded_routes) != 0 and exp['route'] in excluded_routes:
                 continue
             try:
-                exps_dict[date] = {**exps_dict[date], **{exp: item}}
+                exps_dict[date] = {**exps_dict[date], **{exp_name: exp}}
             except:
-                exps_dict[date] = {exp: item}
-    
-    if show_info:            
-        for date, exps in exps_dict.items():
-            print(date, len(exps))
-            for exp_name, exp in exps.items():
-                print({exp_name: exp})
+                exps_dict[date] = {exp_name: exp}
+            
+            if verbose:
+                for dev in exp['devices']:
+                    print('   ', dev)
+                    
+                    for trip in exp['ods']:
+                        if trip == 0:
+                            continue
+                        else:
+                            trip = f'#{trip:02d}'
+                        data_dir = os.path.join(date_path, exp_name, dev, trip)
+                        print('     ', data_dir, os.path.isdir(data_dir))
     
     filepaths = []
     if mode == 'sr':
@@ -111,7 +140,7 @@ def data_loader(
             # print(date, len(exps))
             
             for exp_name, exp in exps.items():
-                exp_dir = os.path.join(root_dir, date, exp_name)
+                exp_dir = os.path.join(root_path, date, exp_name)
                 # print({exp_name: exp})
                 
                 devices = list(exp['devices'].keys())
@@ -135,7 +164,7 @@ def data_loader(
             # print(date, len(exps))
             
             for exp_name, exp in exps.items():
-                exp_dir = os.path.join(root_dir, date, exp_name)
+                exp_dir = os.path.join(root_path, date, exp_name)
                 # print({exp_name: exp})
                 
                 devices = list(exp['devices'].keys())
