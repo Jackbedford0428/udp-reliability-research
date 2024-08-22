@@ -6,8 +6,8 @@ from .dr_profile import *
 from .dr_eval import *
 
 __all__ = [
-    "Profile",
-    "Eval",
+    "SrProfile",
+    "SrEval",
     "DrProfile",
     "DrEval",
 ]

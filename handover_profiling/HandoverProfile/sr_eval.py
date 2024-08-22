@@ -10,52 +10,66 @@ from scipy.stats import gaussian_kde
 from sklearn.metrics import mean_squared_error
 # from tqdm.notebook import tqdm
 from tqdm import tqdm
-from myutils import *
+from Toolkit import *
 from scipy.stats import kendalltau
+import csv
 
 __all__ = [
-    "Eval",
+    "SrEval",
 ]
 
-class Eval:
+class SrEval:
     def __init__(
-        self, filepaths, model_prefix='Test',
-        model_id=None, model_dscp=None, load_path='.', save_path='.', path2results=None,
+        # self, filepaths, model_prefix='Test',
+        # model_id=None, model_dscp=None,
+        # load_path='./20240630_latest_model', save_path='./20240630_latest_model', path2results=None,
+        # dirc_mets='dl_lost',
+        # sp_columns=['type'], ts_column='Timestamp',
+        # save_answer=False, test_mode=False,
+        # dataset_type='train',
+        self, filepaths, route, dataset_type,
+        model_path, model_name,
         dirc_mets='dl_lost',
-        sp_columns=['type'], ts_column='Timestamp',
-        save_answer=False, test_mode=False,
-        dataset_type='train',
+        sp_columns=['type'], ts_column='Timestamp', w_size=0.01,
+        iter_num=1, test_mode=False
     ):
-        if model_id is None:
-            raise TypeError("請輸入模型編號")
+        # if model_id is None:
+        #     raise TypeError("請輸入模型編號")
         
-        self.iter_num = None  # number of iteration while evaluating
-        
-        self.filepaths = copy.deepcopy(filepaths)
-        self.model_name = model_id if model_dscp is None else model_id + '_' + model_dscp
-        self.model_prefix = model_prefix
-        self.dataset_type = dataset_type
+        self.iter_num = iter_num
+        self.test_mode = test_mode
+        # self.anchor_mode = anchor_mode
+        self.sp_columns = sp_columns[:]
+        self.ts_column = ts_column
+        self.w_size = w_size
         
         self.dirc_mets = dirc_mets
         self.dirc, self.mets = dirc_mets[:2], dirc_mets[-4:]
         self.DIRC_TYPE = 'Downlink' if self.dirc == 'dl' else 'Uplink'
         self.METS_TYPE = 'Packet Loss' if self.mets == 'lost' else 'Excessive Latency'
         self.RATE_TYPE = 'PLR' if self.mets == 'lost' else 'ELR'
-        self.sp_columns = sp_columns[:]
-        self.ts_column = ts_column
-        self.save_answer = save_answer
         
-        self.save_path = save_path
-        self.load_path = os.path.join(load_path, self.model_name, 'train', 'sr', self.dirc_mets, 'models', self.model_prefix)
+        self.filepaths = copy.deepcopy(filepaths)
+        # self.model_corr = model_corr
+        self.dataset_type = dataset_type
+        
+        self.model_path = model_path
+        self.model_name = model_name if model_name is not None else route
+        self.route = route if route is not None else model_name.replace('sub', '')
+        
+        self.load_path = os.path.join(self.model_path, self.model_name, self.dirc_mets, 'sr', 'train', 'models', self.model_name)
+        # self.dr_load_path = os.path.join(self.model_path, self.model_name, self.dirc_mets, f'dr_anchor_{self.anchor_mode}', 'train', 'models', self.model_name)
+        self.save_path = os.path.join(self.model_path, self.model_name, self.dirc_mets, 'sr', self.dataset_type, self.route)
+        
+        print(self.save_path)
         print(self.load_path)
+        # print(self.dr_load_path)
         
-        if path2results is None:
-            with open(os.path.join(os.getcwd(), "result_save_path.txt"), "r") as f:
-                self.path2results = f.readline()
-        else:
-            self.path2results = path2results
-        
-        self.test_mode = test_mode
+        # if path2results is None:
+        #     with open(os.path.join(os.getcwd(), "save_path.txt"), "r") as f:
+        #         self.path2results = f.readline()
+        # else:
+        #     self.path2results = path2results
         
         try:
             with open(f'{self.load_path}_kde_models.pkl', 'rb') as f:
@@ -81,7 +95,8 @@ class Eval:
                 self.prob_models = pickle.load(f)
         
         self.date, self.hms_count, self.hex_string, self.figure_id = figure_identity()
-        self.save_name = f'{self.model_prefix}_{self.date}_{self.hms_count}_{self.hex_string}'
+        # self.save_name = f'{self.model_prefix}_{self.date}_{self.hms_count}_{self.hex_string}'
+        self.save_name = f'{self.model_name}_{self.route}'
         self.records = []
 
     @staticmethod
@@ -135,9 +150,9 @@ class Eval:
                 prior_tag = '_'.join([s for s in prior_row[self.sp_columns] if pd.notna(s)])
                 prior_right_bound = prior_row['start'] + pd.Timedelta(seconds=(scope[prior_tag][1]))
                 if pd.notna(prior_row['end']):
-                    left_bound = min(max(current_left_bound, Eval.interpolate(prior_right_bound, current_left_bound), prior_row['end']), start_ts)
+                    left_bound = min(max(current_left_bound, SrEval.interpolate(prior_right_bound, current_left_bound), prior_row['end']), start_ts)
                 else:
-                    left_bound = min(max(current_left_bound, Eval.interpolate(prior_right_bound, current_left_bound), prior_row['start']), start_ts)
+                    left_bound = min(max(current_left_bound, SrEval.interpolate(prior_right_bound, current_left_bound), prior_row['start']), start_ts)
             else:
                 left_bound = current_left_bound
             
@@ -145,9 +160,9 @@ class Eval:
                 post_tag = '_'.join([s for s in post_row[self.sp_columns] if pd.notna(s)])
                 post_left_bound = post_row['start'] + pd.Timedelta(seconds=(scope[post_tag][0]))
                 if pd.notna(end_ts):
-                    right_bound = max(min(current_right_bound, Eval.interpolate(current_right_bound, post_left_bound), post_row['start']), end_ts)
+                    right_bound = max(min(current_right_bound, SrEval.interpolate(current_right_bound, post_left_bound), post_row['start']), end_ts)
                 else:
-                    right_bound = max(min(current_right_bound, Eval.interpolate(current_right_bound, post_left_bound), post_row['start']), start_ts)
+                    right_bound = max(min(current_right_bound, SrEval.interpolate(current_right_bound, post_left_bound), post_row['start']), start_ts)
             else:
                 right_bound = current_right_bound
             
@@ -174,15 +189,20 @@ class Eval:
                 tmp = pd.merge(current_df, plr_mapping, on='window_id', how='left')
                 tmp[RATE_TYPE] = tmp[RATE_TYPE].fillna(0)
                 
-                if not Eval.generate_random_boolean(trigger_probability):
+                if not SrEval.generate_random_boolean(trigger_probability):
                     tmp[RATE_TYPE] = 0
             
             tmp['type'] = tag
             
-            if i == 0:
-                answer = tmp.copy()
-            else:
+            # if i == 0:
+            #     answer = tmp.copy()
+            # else:
+            #     answer = pd.concat([answer, tmp], axis=0)
+            
+            try:
                 answer = pd.concat([answer, tmp], axis=0)
+            except:
+                answer = tmp.copy()
             
             # Update dataframe to accelerate the speed
             this_df = this_df[this_df[self.ts_column] >= interval.upper].copy()
@@ -204,7 +224,7 @@ class Eval:
         trigger_prob_mapping = stable_df[~stable_df['Timestamp_sec'].duplicated()].reset_index(drop=True)[['Timestamp_sec']]
         
         trigger_probability = prob_model['Stable']
-        random_bool_array = [Eval.generate_random_boolean(trigger_probability) for _ in range(len(trigger_prob_mapping))]
+        random_bool_array = [SrEval.generate_random_boolean(trigger_probability) for _ in range(len(trigger_prob_mapping))]
         trigger_prob_mapping['trigger'] = random_bool_array
 
         stable_df = pd.merge(stable_df, trigger_prob_mapping, on='Timestamp_sec', how='left')
@@ -232,7 +252,7 @@ class Eval:
         
         answer = answer.sort_values(by='Timestamp').reset_index(drop=True)
         answer[RATE_TYPE] = answer[RATE_TYPE] / 100
-        answer['Y'] = answer[RATE_TYPE].apply(Eval.generate_random_boolean)
+        answer['Y'] = answer[RATE_TYPE].apply(SrEval.generate_random_boolean)
         
         eval_value = answer['Y'].mean() * 100
         ground_value = df[mets].mean() * 100
@@ -250,7 +270,7 @@ class Eval:
         n = len(self.filepaths)
         for i, filepath in enumerate(self.filepaths):
             
-            if self.test_mode and i > 1:
+            if self.test_mode and i > 0:
                 break
             
             path = filepath[1] if dirc == 'dl' else filepath[2]
@@ -329,24 +349,27 @@ class Eval:
             self.records.append((loss_rate_list, mean_value, std_deviation, ground_value, error, sm_dev, sm_trip, path))
             
             # Save Answers
-            if self.save_answer:
-                # save_path = os.path.join(self.path2results, self.model_name, 'sr', self.dirc_mets, f'{self.save_name}_iter{N}')
-                save_path = os.path.join(self.path2results, self.model_name, self.dataset_type, 'sr', self.dirc_mets, f'{self.save_name}_iter{N}')
-                if not os.path.isdir(save_path):
-                    os.makedirs(save_path)
+            # if self.save_answer:
+            #     # save_path = os.path.join(self.path2results, self.model_name, 'sr', self.dirc_mets, f'{self.save_name}_iter{N}')
+            #     save_path = os.path.join(self.path2results, self.model_name, self.dataset_type, 'sr', self.dirc_mets, f'{self.save_name}_iter{N}')
+            #     if not os.path.isdir(save_path):
+            #         os.makedirs(save_path)
                     
-                save_path = os.path.join(save_path, path.replace('/', '\\'))
-                print(save_path)
+            #     save_path = os.path.join(save_path, path.replace('/', '\\'))
+            #     print(save_path)
                 
-                answer.to_csv(save_path, index=False)
+            #     answer.to_csv(save_path, index=False)
             
             # Save Results
             # save_path = os.path.join(self.save_path, self.model_name, 'sr', self.dirc_mets, 'results')
-            save_path = os.path.join(self.save_path, self.model_name, self.dataset_type, 'sr', self.dirc_mets, 'results')
+            # save_path = os.path.join(self.save_path, self.model_name, self.dataset_type, 'sr', self.dirc_mets, 'results')
+            # save_path = os.path.join(self.save_path, 'results')
+            save_path = self.save_path
             if not os.path.isdir(save_path):
                 os.makedirs(save_path)
                 
-            save_path = os.path.join(save_path, f'{self.save_name}_iter{N}.pkl')
+            # save_path = os.path.join(save_path, f'{self.save_name}_iter{N}.pkl')
+            save_path = os.path.join(save_path, f'{self.save_name}.pkl')
             print(save_path)
             
             with open(save_path, 'wb') as f:
@@ -360,7 +383,7 @@ class Eval:
         RATE_TYPE = self.RATE_TYPE
         
         if title == None:
-            title = f'SR {self.DIRC_TYPE} {self.RATE_TYPE} | {self.model_prefix}'
+            title = f'SR {self.DIRC_TYPE} {self.RATE_TYPE} | {self.model_name}_{self.route}'
         
         # Sample data
         x = [s[3] for s in self.records]  # Ground truths
@@ -373,8 +396,8 @@ class Eval:
         fig, ax = plt.subplots(figsize=(6, 4))
 
         # Scatter plot with error bars and horizontal caps
-        ax.errorbar(x, y, yerr=y_error, linestyle='None', marker='o', color='tab:blue', capsize=5)
-        ax.scatter([], [], linestyle='None', marker='o', color='tab:blue', label='Data Points')
+        # ax.errorbar(x, y, yerr=y_error, linestyle='None', marker='o', color='tab:blue', capsize=5)
+        ax.scatter(x, y, linestyle='None', marker='o', color='tab:blue', label='Experiment Data')
 
         # Annotate RMSE From the ground truths
         rmse = np.sqrt(mean_squared_error(x, y))
@@ -383,6 +406,12 @@ class Eval:
         ax.annotate(slope_annotation, xy=(0.45, 0.85), xycoords='axes fraction', fontsize=13, fontstyle='italic', fontweight='bold', color='black')
         slope_annotation = f'τ (p.v.): {tau:.2f} ({p_value:.3f})'
         ax.annotate(slope_annotation, xy=(0.45, 0.80), xycoords='axes fraction', fontsize=13, fontstyle='italic', fontweight='bold', color='black')
+        
+        underestimations = [1 for true, pred in zip(x, y) if pred < true]
+        underestimation_rate = sum(underestimations) / len(x) * 100
+        
+        overestimations = [1 for true, pred in zip(x, y) if pred > true]
+        overestimation_rate = sum(overestimations) / len(x) * 100
 
         x_limits = ax.get_xlim()
         y_limits = ax.get_ylim()
@@ -402,9 +431,9 @@ class Eval:
         y_lower = 0.9 * x_values
         
         # 绘制 y = 1.1x 和 y = 0.9x 线
-        ax.plot(x_values, y_upper, linestyle='-', linewidth=1.1, color='tab:orange', label='10%-Bound')
-        ax.plot(x_values, y_lower, linestyle='-', linewidth=1.1, color='tab:orange')
-        ax.fill_between(x_values, y_lower, y_upper, color='tab:orange', alpha=0.3)  # 在两条线之间填充颜色
+        # ax.plot(x_values, y_upper, linestyle='-', linewidth=1.1, color='tab:orange', label='10%-Bound')
+        # ax.plot(x_values, y_lower, linestyle='-', linewidth=1.1, color='tab:orange')
+        # ax.fill_between(x_values, y_lower, y_upper, color='tab:orange', alpha=0.3)  # 在两条线之间填充颜色
 
         # Set labels and title
         ax.set_xlabel(f'{RATE_TYPE} Ground Truth')
@@ -426,10 +455,13 @@ class Eval:
         
         # Save figure
         # save_path = os.path.join(self.save_path, self.model_name, 'sr', self.dirc_mets, 'figures')
-        save_path = os.path.join(self.save_path, self.model_name, self.dataset_type, 'sr', self.dirc_mets, 'figures')
+        # save_path = os.path.join(self.save_path, self.model_name, self.dataset_type, 'sr', self.dirc_mets, 'figures')
+        # save_path = os.path.join(self.save_path, 'figures')
+        save_path = self.save_path
         if not os.path.isdir(save_path):
             os.makedirs(save_path)
-        save_path = os.path.join(save_path, f'{self.save_name}_iter{self.iter_num}.png')
+        # save_path = os.path.join(save_path, f'{self.save_name}_iter{self.iter_num}.png')
+        save_path = os.path.join(save_path, f'{self.save_name}.png')
         
         print(save_path)
         fig.savefig(save_path, dpi=300, bbox_inches='tight')
@@ -437,4 +469,20 @@ class Eval:
         # Show plot
         plt.show()
         plt.close(fig)
+        
+        save_path = self.save_path
+        # save_path = os.path.join(self.save_path, 'logs')
+        if not os.path.isdir(save_path):
+            os.makedirs(save_path)
+        # save_path = os.path.join(save_path, f'{self.save_name}_iter{self.iter_num}.csv')
+        save_path = os.path.join(save_path, f'{self.save_name}.csv')
+        
+        print(save_path)
+        with open(save_path, mode='w') as file:
+            writer = csv.writer(file)
+            # 寫入表頭
+            writer.writerow(['RMSE (%)', 'τ (p.v.)', 'Underestimation (%)', 'Overestimation (%)'])
+            # 寫入資料
+            writer.writerow([f'{rmse:.3f} ({rmse_rate:.1f}%)', f'{tau:.2f} ({p_value:.3f})', f'{underestimation_rate:.1f}%', f'{overestimation_rate:.1f}%'])
+        
         

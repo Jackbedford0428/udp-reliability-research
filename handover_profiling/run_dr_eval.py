@@ -1,29 +1,115 @@
-from runTestList_1020 import Run_Test_List
+from runTestList import Run_Test_List
 from pytictoc import TicToc
+
+
+# # Training Set - Single
+# t = TicToc()  # create instance of class
+# t.tic()       # Start timer
+
+# test_scenario = [
+#     {
+#         '-cc': ['mle', 'adjust', 'zero', 'max', '25%', '50%', '75%'],
+#         '-mm': ['dl_lost', 'dl_excl', 'ul_lost', 'ul_excl'],
+#         '-r': ['BR', 'A', 'B', 'R', 'G', 'O2'],
+#         # '-m': ['subBR', 'subA', 'subB', 'subR', 'subG', 'subO2'],
+#     }
+# ]
+
+# Run_Test_List('python3 ./eval_dr_handover_profile.py \
+#     -dt train -am by_event -it 1 \
+#     -p 20240630_latest_model \
+#     -d 2024-03-19 2024-03-20 2024-06-18-1 2024-06-19-1 2024-06-20-1 2024-06-21-1',
+#     test_scenario=test_scenario, cpu_count=30)
+
+# t.toc()  # Time elapsed since t.tic()
+
+
+# # Testing Set - Single
+# t = TicToc()  # create instance of class
+# t.tic()       # Start timer
+
+# test_scenario = [
+#     {
+#         '-cc': ['mle', 'adjust', 'zero', 'max', '25%', '50%', '75%'],
+#         '-mm': ['dl_lost', 'dl_excl', 'ul_lost', 'ul_excl'],
+#         '-r': ['BR', 'A', 'B', 'R', 'G', 'O2'],
+#         # '-m': ['subBR', 'subA', 'subB', 'subR', 'subG', 'subO2'],
+#     }
+# ]
+
+# Run_Test_List('python3 ./eval_dr_handover_profile.py \
+#     -dt test -am by_event -it 1 \
+#     -p 20240630_latest_model \
+#     -d 2024-05-14 2024-05-15 2024-06-18-2 2024-06-19-2 2024-06-20-2 2024-06-21-2',
+#     test_scenario=test_scenario, cpu_count=30)
+
+# t.toc()  # Time elapsed since t.tic()
+
+
+# Testing Set - Sub
+t = TicToc()  # create instance of class
+t.tic()       # Start timer
 
 test_scenario = [
     {
-        # '-am': ['by_event', 'by_packet'],
-        '-am': ['by_event'],
-        '-cc': [None, 'adjust', 'zero', 'max', '25%', '50%', '75%'],
-        '-r': ['BR', 'A'],
-        '-dm': ['dl_lost', 'dl_excl', 'ul_lost', 'ul_excl'],
-        # '-r': ['BR'],
-        # '-dm': ['dl_lost'],
-        # '-am': ['by_event'],
-        # '-cc': [None]
+        '-cc': ['mle', 'adjust', 'zero', 'max', '25%', '50%', '75%'],
+        '-mm': ['dl_lost', 'dl_excl', 'ul_lost', 'ul_excl'],
+        # '-r': ['BR', 'A', 'B', 'R', 'G', 'O2'],
+        # '-m': ['subBR', 'subA', 'subB', 'subR', 'subG', 'subO2'],
+        '-m': ['subA', 'subB', 'subR', 'subG', 'subO2'],
     }
 ]
 
-t0 = TicToc()  # create instance of class
-t0.tic()       # Start timer
+Run_Test_List('python3 ./eval_dr_handover_profile.py \
+    -dt test -am by_event -it 1 \
+    -p 20240630_latest_model \
+    -d 2024-05-14 2024-05-15 2024-06-18-2 2024-06-19-2 2024-06-20-2 2024-06-21-2',
+    test_scenario=test_scenario, cpu_count=25)
 
-Run_Test_List('python3 ./eval_dr_handover_profiling_param.py \
-    -sa -it 1 -dt test \
-    -d 2024-05-14 2024-05-15 \
-    -srm 20240417_1333007d66_new_data_sync_v2 \
-    -drm dr_20240417_1452001e84', test_scenario=test_scenario, cpu_count=20)
+t.toc()  # Time elapsed since t.tic()
 
-# Run_Test_List('python3 ./test.py')
+# python3 ./eval_dr_handover_profile.py -dt test -am by_event -it 1 -p 20240630_latest_model_test -d 2024-05-14 2024-05-15 2024-06-18-2 2024-06-19-2 2024-06-20-2 2024-06-21-2 -cc mle -mm dl_lost -m subA
 
-t0.toc()  # Time elapsed since t.tic()
+
+# # Training Set - All
+# t = TicToc()  # create instance of class
+# t.tic()       # Start timer
+
+# test_scenario = [
+#     {
+#         '-cc': ['mle', 'adjust', 'zero', 'max', '25%', '50%', '75%'],
+#         '-mm': ['dl_lost', 'dl_excl', 'ul_lost', 'ul_excl'],
+#         '-r': ['BR', 'A', 'B', 'R', 'G', 'O2'],
+#         # '-m': ['subBR', 'subA', 'subB', 'subR', 'subG', 'subO2'],
+#     }
+# ]
+
+# Run_Test_List('python3 ./eval_dr_handover_profile.py \
+#     -m all -dt train -am by_event -it 1 \
+#     -p 20240630_latest_model \
+#     -d 2024-03-19 2024-03-20 2024-06-18-1 2024-06-19-1 2024-06-20-1 2024-06-21-1',
+#     test_scenario=test_scenario, cpu_count=30)
+
+# t.toc()  # Time elapsed since t.tic()
+
+
+# # Testing Set - All
+# t = TicToc()  # create instance of class
+# t.tic()       # Start timer
+
+# test_scenario = [
+#     {
+#         '-cc': ['mle', 'adjust', 'zero', 'max', '25%', '50%', '75%'],
+#         '-mm': ['dl_lost', 'dl_excl', 'ul_lost', 'ul_excl'],
+#         '-r': ['BR', 'A', 'B', 'R', 'G', 'O2'],
+#         # '-m': ['subBR', 'subA', 'subB', 'subR', 'subG', 'subO2'],
+#     }
+# ]
+
+# Run_Test_List('python3 ./eval_dr_handover_profile.py \
+#     -m all -dt test -am by_event -it 1 \
+#     -p 20240630_latest_model \
+#     -d 2024-05-14 2024-05-15 2024-06-18-2 2024-06-19-2 2024-06-20-2 2024-06-21-2',
+#     test_scenario=test_scenario, cpu_count=30)
+
+# t.toc()  # Time elapsed since t.tic()

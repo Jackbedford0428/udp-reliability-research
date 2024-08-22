@@ -10,8 +10,9 @@ from scipy.stats import gaussian_kde
 from sklearn.metrics import mean_squared_error
 # from tqdm.notebook import tqdm
 from tqdm import tqdm
-from myutils import *
+from Toolkit import *
 from scipy.stats import kendalltau
+import csv
 
 __all__ = [
     "DrEval",
@@ -19,52 +20,59 @@ __all__ = [
 
 class DrEval:
     def __init__(
-        self, filepaths, model_prefix='Test', model_corr=None,
-        sr_model_id=None, sr_model_dscp=None, dr_model_id=None, dr_model_dscp=None,
-        load_path='.', save_path='.', path2results=None, dirc_mets='dl_lost',
+        # self, filepaths, model_prefix='Test', model_corr=None,
+        # sr_model_id=None, sr_model_dscp=None, dr_model_id=None, dr_model_dscp=None,
+        # load_path='.', save_path='.', path2results=None, dirc_mets='dl_lost',
+        # sp_columns=['type'], ts_column='Timestamp', w_size=0.01,
+        # save_answer=False, anchor_mode='by_event', test_mode=False,
+        # dataset_type='train',
+        self, filepaths, route, dataset_type,
+        model_path, model_name, anchor_mode,
+        dirc_mets='dl_lost', model_corr='mle',
         sp_columns=['type'], ts_column='Timestamp', w_size=0.01,
-        save_answer=False, anchor_mode='by_event', test_mode=False,
-        dataset_type='train',
+        iter_num=1, test_mode=False
     ):
         
-        if sr_model_id is None:
-            raise TypeError("請輸入單通道模型編號")
+        # if sr_model_id is None:
+        #     raise TypeError("請輸入單通道模型編號")
         
-        if dr_model_id is None:
-            raise TypeError("請輸入雙通道模型編號")
+        # if dr_model_id is None:
+        #     raise TypeError("請輸入雙通道模型編號")
         
-        self.iter_num = None  # number of iteration while evaluating
-        
-        self.filepaths = copy.deepcopy(filepaths)
-        self.sr_model_name = sr_model_id if sr_model_dscp is None else sr_model_id + '_' + sr_model_dscp
-        self.dr_model_name = dr_model_id if dr_model_dscp is None else dr_model_id + '_' + dr_model_dscp
-        self.model_prefix = model_prefix
-        self.model_corr = model_corr
-        self.dataset_type = dataset_type
+        self.iter_num = iter_num
+        self.test_mode = test_mode
+        self.anchor_mode = anchor_mode
+        self.sp_columns = sp_columns[:]
+        self.ts_column = ts_column
+        self.w_size = w_size
         
         self.dirc_mets = dirc_mets
         self.dirc, self.mets = dirc_mets[:2], dirc_mets[-4:]
         self.DIRC_TYPE = 'Downlink' if self.dirc == 'dl' else 'Uplink'
         self.METS_TYPE = 'Packet Loss' if self.mets == 'lost' else 'Excessive Latency'
         self.RATE_TYPE = 'PLR' if self.mets == 'lost' else 'ELR'
-        self.sp_columns = sp_columns[:]
-        self.ts_column = ts_column
-        self.w_size = w_size
-        self.save_answer = save_answer
-        self.save_path = save_path
-        print(self.save_path, self.sr_model_name, self.dr_model_name, self.model_prefix, self.dirc_mets)
         
-        self.sr_load_path = os.path.join(load_path, self.sr_model_name, 'train', 'sr', self.dirc_mets, 'models', self.model_prefix)
+        self.filepaths = copy.deepcopy(filepaths)
+        self.model_corr = model_corr
+        self.dataset_type = dataset_type
+        
+        self.model_path = model_path
+        self.model_name = model_name if model_name is not None else route
+        self.route = route if route is not None else model_name.replace('sub', '')
+        
+        self.sr_load_path = os.path.join(self.model_path, self.model_name, self.dirc_mets, 'sr', 'train', 'models', self.model_name)
+        self.dr_load_path = os.path.join(self.model_path, self.model_name, self.dirc_mets, f'dr_anchor_{self.anchor_mode}', 'train', 'models', self.model_name)
+        self.save_path = os.path.join(self.model_path, self.model_name, self.dirc_mets, f'dr_anchor_{self.anchor_mode}', self.dataset_type, self.route)
+        
+        print(self.save_path)
         print(self.sr_load_path)
+        print(self.dr_load_path)
         
-        if path2results is None:
-            with open(os.path.join(os.getcwd(), "result_save_path.txt"), "r") as f:
-                self.path2results = f.readline()
-        else:
-            self.path2results = path2results
-        
-        self.anchor_mode = anchor_mode
-        self.test_mode = test_mode
+        # if path2results is None:
+        #     with open(os.path.join(os.getcwd(), "save_path.txt"), "r") as f:
+        #         self.path2results = f.readline()
+        # else:
+        #     self.path2results = path2results
         
         try:
             with open(f'{self.sr_load_path}_kde_models.pkl', 'rb') as f:
@@ -89,11 +97,7 @@ class DrEval:
             with open(f'{self.sr_load_path}_sr_prob_models.pkl', 'rb') as f:
                 self.sr_prob_models = pickle.load(f)
         
-        self.dr_load_path = os.path.join(load_path, self.sr_model_name, 'train', self.dr_model_name, self.dirc_mets, 'models', self.model_prefix)
-        print(self.dr_load_path)
-        
-        dr_prob_models_filepath = f'{self.dr_load_path}_dr_prob_models_mle.pkl' if self.model_corr is None else f'{self.dr_load_path}_dr_prob_models_{self.model_corr}.pkl'
-        print(dr_prob_models_filepath)
+        dr_prob_models_filepath = f'{self.dr_load_path}_dr_prob_models_{self.model_corr}.pkl'
         try:
             with open(dr_prob_models_filepath, 'rb') as f:
                 self.dr_prob_models = pickle.load(f)[self.dirc_mets]
@@ -102,10 +106,15 @@ class DrEval:
                 self.dr_prob_models = pickle.load(f)
         
         self.date, self.hms_count, self.hex_string, self.figure_id = figure_identity()
+        # if self.model_corr is None:
+        #     self.save_name = f'{self.model_name}_{self.route}_mle_{self.date}_{self.hms_count}_{self.hex_string}'
+        # else:
+        #     self.save_name = f'{self.model_name}_{self.route}_{self.model_corr}_{self.date}_{self.hms_count}_{self.hex_string}'
+            
         if self.model_corr is None:
-            self.save_name = f'{self.model_prefix}_mle_{self.date}_{self.hms_count}_{self.hex_string}'
+            self.save_name = f'{self.model_name}_{self.route}_mle'
         else:
-            self.save_name = f'{self.model_prefix}_{self.model_corr}_{self.date}_{self.hms_count}_{self.hex_string}'
+            self.save_name = f'{self.model_name}_{self.route}_{self.model_corr}'
         
         self.records = []
 
@@ -204,10 +213,15 @@ class DrEval:
             
             tmp['type'] = tag
             
-            if i == 0:
-                answer = tmp.copy()
-            else:
+            # if i == 0:
+            #     answer = tmp.copy()
+            # else:
+            #     answer = pd.concat([answer, tmp], axis=0)
+            
+            try:
                 answer = pd.concat([answer, tmp], axis=0)
+            except:
+                answer = tmp.copy()
             
             # Update dataframe to accelerate the speed
             this_df = this_df[this_df[self.ts_column] >= interval.upper].copy()
@@ -744,10 +758,15 @@ class DrEval:
             tmp['anchor_state'] = anchor_state
             tmp['type'] = tag
             
-            if i == 0:
-                answer = tmp.copy()
-            else:
+            # if i == 0:
+            #     answer = tmp.copy()
+            # else:
+            #     answer = pd.concat([answer, tmp], axis=0)
+            
+            try:
                 answer = pd.concat([answer, tmp], axis=0)
+            except:
+                answer = tmp.copy()
             
             # Update dataframe to accelerate the speed
             this_df = this_df[this_df[self.ts_column] >= interval.upper].copy()
@@ -951,24 +970,27 @@ class DrEval:
             self.records.append((loss_rate_list, mean_value, std_deviation, ground_value, error, sm_dev, sm_trip, path1, path2))
             
             # Save Answers
-            if self.save_answer:
-                # save_path = os.path.join(self.path2results, self.sr_model_name, self.dr_model_name, self.dirc_mets, f'{self.save_name}_iter{N}')
-                save_path = os.path.join(self.path2results, self.sr_model_name, self.dataset_type, self.dr_model_name, self.dirc_mets, f'{self.save_name}_iter{N}')
-                if not os.path.isdir(save_path):
-                    os.makedirs(save_path)
+            # if self.save_answer:
+            #     # save_path = os.path.join(self.path2results, self.sr_model_name, self.dr_model_name, self.dirc_mets, f'{self.save_name}_iter{N}')
+            #     save_path = os.path.join(self.path2results, self.sr_model_name, self.dataset_type, self.dr_model_name, self.dirc_mets, f'{self.save_name}_iter{N}')
+            #     if not os.path.isdir(save_path):
+            #         os.makedirs(save_path)
                     
-                save_path = os.path.join(save_path, path1.replace('/', '\\')[:-4]+path2.replace('/', '\\'))
-                print(save_path)
+            #     save_path = os.path.join(save_path, path1.replace('/', '\\')[:-4]+path2.replace('/', '\\'))
+            #     print(save_path)
                 
-                answer.to_csv(save_path, index=False)
+            #     answer.to_csv(save_path, index=False)
             
             # Save Results
             # save_path = os.path.join(self.save_path, self.sr_model_name, self.dr_model_name, self.dirc_mets, 'results')
-            save_path = os.path.join(self.save_path, self.sr_model_name, self.dataset_type, self.dr_model_name, self.dirc_mets, 'results')
+            # save_path = os.path.join(self.save_path, self.sr_model_name, self.dataset_type, self.dr_model_name, self.dirc_mets, 'results')
+            # save_path = os.path.join(self.save_path, 'results')
+            save_path = self.save_path
             if not os.path.isdir(save_path):
                 os.makedirs(save_path)
                 
-            save_path = os.path.join(save_path, f'{self.save_name}_iter{N}.pkl')
+            # save_path = os.path.join(save_path, f'{self.save_name}_iter{N}.pkl')
+            save_path = os.path.join(save_path, f'{self.save_name}.pkl')
             print(save_path)
             
             with open(save_path, 'wb') as f:
@@ -982,15 +1004,15 @@ class DrEval:
         RATE_TYPE = self.RATE_TYPE
         
         if title is None:
-            if self.model_corr is None:
-                title = f'DR {self.DIRC_TYPE} {self.RATE_TYPE} | {self.model_prefix} (MLE)'
+            if self.model_corr == 'mle':
+                title = f'DR {self.DIRC_TYPE} {self.RATE_TYPE} | {self.model_name}_{self.route} (MLE)'
             elif self.model_corr == 'adjust':
                 suffix = self.model_corr.capitalize()
-                title = f'DR {self.DIRC_TYPE} {self.RATE_TYPE} | {self.model_prefix} ({suffix})'
+                title = f'DR {self.DIRC_TYPE} {self.RATE_TYPE} | {self.model_name}_{self.route} ({suffix})'
             else:
                 mode = self.model_corr.split('_')[0]
                 suffix = mode.capitalize() + ' ' + 'C.C.'
-                title = f'DR {self.DIRC_TYPE} {self.RATE_TYPE} | {self.model_prefix} ({suffix})'
+                title = f'DR {self.DIRC_TYPE} {self.RATE_TYPE} | {self.model_name}_{self.route} ({suffix})'
         
         # Sample data
         x = [s[3] for s in self.records]  # Ground truths
@@ -1003,8 +1025,8 @@ class DrEval:
         fig, ax = plt.subplots(figsize=(6, 4))
 
         # Scatter plot with error bars and horizontal caps
-        ax.errorbar(x, y, yerr=y_error, linestyle='None', marker='o', color='tab:blue', capsize=5)
-        ax.scatter([], [], linestyle='None', marker='o', color='tab:blue', label='Data Points')
+        # ax.errorbar(x, y, yerr=y_error, linestyle='None', marker='o', color='tab:blue', capsize=5)
+        ax.scatter(x, y, linestyle='None', marker='o', color='tab:blue', label='Experiment Data')
 
         # Annotate RMSE From the ground truths
         rmse = np.sqrt(mean_squared_error(x, y))
@@ -1013,6 +1035,12 @@ class DrEval:
         ax.annotate(slope_annotation, xy=(0.45, 0.85), xycoords='axes fraction', fontsize=13, fontstyle='italic', fontweight='bold', color='black')
         slope_annotation = f'τ (p.v.): {tau:.2f} ({p_value:.3f})'
         ax.annotate(slope_annotation, xy=(0.45, 0.80), xycoords='axes fraction', fontsize=13, fontstyle='italic', fontweight='bold', color='black')
+        
+        underestimations = [1 for true, pred in zip(x, y) if pred < true]
+        underestimation_rate = sum(underestimations) / len(x) * 100
+        
+        overestimations = [1 for true, pred in zip(x, y) if pred > true]
+        overestimation_rate = sum(overestimations) / len(x) * 100
         
         x_limits = ax.get_xlim()
         y_limits = ax.get_ylim()
@@ -1032,9 +1060,9 @@ class DrEval:
         y_lower = 0.9 * x_values
         
         # 绘制 y = 1.1x 和 y = 0.9x 线
-        ax.plot(x_values, y_upper, linestyle='-', linewidth=1.1, color='tab:orange', label='10%-Bound')
-        ax.plot(x_values, y_lower, linestyle='-', linewidth=1.1, color='tab:orange')
-        ax.fill_between(x_values, y_lower, y_upper, color='tab:orange', alpha=0.3)  # 在两条线之间填充颜色
+        # ax.plot(x_values, y_upper, linestyle='-', linewidth=1.1, color='tab:orange', label='10%-Bound')
+        # ax.plot(x_values, y_lower, linestyle='-', linewidth=1.1, color='tab:orange')
+        # ax.fill_between(x_values, y_lower, y_upper, color='tab:orange', alpha=0.3)  # 在两条线之间填充颜色
 
         # Set labels and title
         ax.set_xlabel(f'{RATE_TYPE} Ground Truth')
@@ -1056,10 +1084,13 @@ class DrEval:
         
         # Save figure
         # save_path = os.path.join(self.save_path, self.sr_model_name, self.dr_model_name, self.dirc_mets, 'figures')
-        save_path = os.path.join(self.save_path, self.sr_model_name, self.dataset_type, self.dr_model_name, self.dirc_mets, 'figures')
+        # save_path = os.path.join(self.save_path, self.sr_model_name, self.dataset_type, self.dr_model_name, self.dirc_mets, 'figures')
+        # save_path = os.path.join(self.save_path, 'figures')
+        save_path = self.save_path
         if not os.path.isdir(save_path):
             os.makedirs(save_path)
-        save_path = os.path.join(save_path, f'{self.save_name}_iter{self.iter_num}.png')
+        # save_path = os.path.join(save_path, f'{self.save_name}_iter{self.iter_num}.png')
+        save_path = os.path.join(save_path, f'{self.save_name}.png')
         
         print(save_path)
         fig.savefig(save_path, dpi=300, bbox_inches='tight')
@@ -1067,4 +1098,19 @@ class DrEval:
         # Show plot
         plt.show()
         plt.close(fig)
+        
+        # save_path = os.path.join(self.save_path, 'logs')
+        save_path = self.save_path
+        if not os.path.isdir(save_path):
+            os.makedirs(save_path)
+        # save_path = os.path.join(save_path, f'{self.save_name}_iter{self.iter_num}.csv')
+        save_path = os.path.join(save_path, f'{self.save_name}.csv')
+        
+        print(save_path)
+        with open(save_path, mode='w') as file:
+            writer = csv.writer(file)
+            # 寫入表頭
+            writer.writerow(['RMSE (%)', 'τ (p.v.)', 'Underestimation (%)', 'Overestimation (%)'])
+            # 寫入資料
+            writer.writerow([f'{rmse:.3f} ({rmse_rate:.1f}%)', f'{tau:.2f} ({p_value:.3f})', f'{underestimation_rate:.1f}%', f'{overestimation_rate:.1f}%'])
         
