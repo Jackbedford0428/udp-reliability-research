@@ -15,27 +15,18 @@ __all__ = [
 ]
 
 class DrProfile():
-    def __init__(
-        self, filepaths, model_prefix='Test',
-        sr_model_id=None, sr_model_dscp=None, # dr_model_id=None, dr_model_dscp=None,
-        load_path='.', save_path='.',
-        dirc_mets='dl_lost',
-        sp_columns=['type'], ts_column='Timestamp',
-        anchor_mode='by_event', test_mode=False,
-        corr_lst=['zero', 'max', '25%', '50%', '75%']
+    def __init__(self,
+                 filepaths, model_name1, model_name2, route,
+                 dirc_mets='dl_lost', anchor_mode='by_event', test_mode=False,
+                 sp_columns=['type'], ts_column='Timestamp', corr_lst=['zero', 'max', '25%', '50%', '75%'],
+                 load_path='.', save_path='.'
     ):
         
-        if sr_model_id is None:
-            raise TypeError("請輸入單通道模型編號")
-        
-        # if dr_model_id is None:
-        #     raise TypeError("請輸入雙通道模型編號")
-        
         self.filepaths = copy.deepcopy(filepaths)
-        self.sr_model_name = sr_model_id if sr_model_dscp is None else sr_model_id + '_' + sr_model_dscp
-        # self.dr_model_name = dr_model_id if dr_model_dscp is None else dr_model_id + '_' + dr_model_dscp
-        self.dr_model_name = 'dr_anchor_by_event'
-        self.model_prefix = model_prefix
+        self.model_name1 = model_name1
+        self.model_name2 = model_name2
+        self.dr_model_name = f'dr_anchor_{anchor_mode}'
+        self.route = route
         
         self.dirc_mets = dirc_mets
         self.dirc, self.mets = dirc_mets[:2], dirc_mets[-4:]
@@ -49,9 +40,10 @@ class DrProfile():
         self.corr_lst = corr_lst[:]
         
         self.save_path = save_path
-        print(self.save_path, self.sr_model_name, self.dr_model_name, self.model_prefix, self.dirc_mets)
-        # self.load_path = os.path.join(load_path, self.sr_model_name, 'sr', self.dirc_mets, 'models', self.model_prefix)
-        self.load_path = os.path.join(load_path, self.sr_model_name, self.dirc_mets, 'sr', 'train', 'models', self.model_prefix)
+        print(self.save_path, self.model_name1, self.model_name2, self.dirc_mets, self.dr_model_name)
+        
+        self.load_path = os.path.join(load_path, self.model_name1, self.model_name2, self.dirc_mets, 'sr', 'models', self.model_name2)
+        print(self.load_path)
         
         try:
             with open(f'{self.load_path}_kde_models.pkl', 'rb') as f:
@@ -86,10 +78,10 @@ class DrProfile():
         self.dr_prob_models_adjust_table = None
         
         # Building Dr Model
-        # self.construct_profile()
-        # self.estimate_probability()
-        # self.adjust_parameters()
-        # self.save_models()
+        self.construct_profile()
+        self.estimate_probability()
+        self.adjust_parameters()
+        self.save_models()
         for mode in corr_lst:
             _, _ = self.alter_corr_coef(mode, rho_force=None)
     
@@ -718,14 +710,14 @@ class DrProfile():
     
             
     def save_models(self):
-        save_path = os.path.join(self.save_path, self.sr_model_name, self.dirc_mets, self.dr_model_name, 'train', 'models')
+        save_path = os.path.join(self.save_path, self.model_name1, self.model_name2, self.dirc_mets, self.dr_model_name, 'models')
         if not os.path.isdir(save_path):
             os.makedirs(save_path)
             
-        print('Save DR models:', self.model_prefix, '->', save_path)
+        print('Save DR models:', self.model_name2, '->', save_path)
         print()
         
-        save_path = os.path.join(save_path, self.model_prefix)
+        save_path = os.path.join(save_path, self.model_name2)
         
         with open(f'{save_path}_dr_prob_models_mle.pkl', 'wb') as f:
             pickle.dump(self.dr_prob_models, f)
@@ -737,8 +729,7 @@ class DrProfile():
     
     
     def alter_corr_coef(self, mode='zero', rho_force=None):
-        sr_model_name, dr_model_name = self.sr_model_name, self.dr_model_name
-        route = self.model_prefix
+        model_name1, model_name2, dr_model_name = self.model_name1, self.model_name2, self.dr_model_name
         dirc_mets = self.dirc_mets
 
         def rho_restriction(p, q):
@@ -803,16 +794,16 @@ class DrProfile():
             else:
                 return rho
         
-        load_path = os.path.join('.', sr_model_name, dirc_mets, dr_model_name, 'train', 'models')
+        load_path = os.path.join('.', model_name1, model_name2, dirc_mets, dr_model_name, 'models')
         
         try:
-            with open(os.path.join(load_path, f'{route}_dr_prob_models_mle.pkl'), 'rb') as f:
+            with open(os.path.join(load_path, f'{model_name2}_dr_prob_models_mle.pkl'), 'rb') as f:
                 dr_prob_models = pickle.load(f)[dirc_mets]
         except:
-            with open(os.path.join(load_path, f'{route}_dr_prob_models_mle.pkl'), 'rb') as f:
+            with open(os.path.join(load_path, f'{model_name2}_dr_prob_models_mle.pkl'), 'rb') as f:
                 dr_prob_models = pickle.load(f)
                 
-        dr_prob_models_table = pd.read_csv(os.path.join(load_path, f'{route}_dr_prob_models_mle_table.csv'), index_col=[0, 1])
+        dr_prob_models_table = pd.read_csv(os.path.join(load_path, f'{model_name2}_dr_prob_models_mle_table.csv'), index_col=[0, 1])
         
         adjust_table = pd.DataFrame(columns="type1, type2, p, q, rho_lower, rho_upper, rho, alpha, beta, gamma, delta, a, b, c, d, sum".split(", "))
         items = ['LTEH', 'ENBH', 'MCGH', 'MNBH', 'SCGM', 'SCGA', 'SCGR-I', 'SCGR-II', 'SCGC-I', 'SCGC-II', 'SCGF', 'MCGF', 'NASR', 'Stable']
@@ -848,9 +839,9 @@ class DrProfile():
             model_adjust[pair] = (alpha, beta)
             model_adjust[(pair[1], pair[0])] = (gamma, delta)
         
-        with open(os.path.join(load_path, f'{route}_dr_prob_models_{mode}_cc.pkl'), 'wb') as f:
+        with open(os.path.join(load_path, f'{model_name2}_dr_prob_models_{mode}_cc.pkl'), 'wb') as f:
             pickle.dump(model_adjust, f)
-        adjust_table.to_csv(os.path.join(load_path, f'{route}_dr_prob_models_{mode}_cc_table.csv'))
+        adjust_table.to_csv(os.path.join(load_path, f'{model_name2}_dr_prob_models_{mode}_cc_table.csv'))
         
         return adjust_table, model_adjust
         

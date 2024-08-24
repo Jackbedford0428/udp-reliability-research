@@ -31,80 +31,88 @@ pd.set_option('display.max_columns', 100)
 
 # %%
 parser = argparse.ArgumentParser()
-parser.add_argument("-d", "--dates", type=str, nargs='+', help="date folders to process")
 parser.add_argument("-r", "--route", type=str, help="experiment route")
-parser.add_argument("-s", "--slice", type=int, help="slice number for testing functionality")
-parser.add_argument("-p", "--model_path", type=str, help="model_path")
-parser.add_argument("-m", "--model_name", type=str, help="model_name")
-parser.add_argument("-mm", "--direction_metrics", type=str, default='dl_lost', help="direction and metrics")
-parser.add_argument("-am", "--anchor_mode", type=str, default='by_event', help="anchor mode")
+parser.add_argument("-n1", "--model_name1", type=str, help="model name layer 1")
+parser.add_argument("-n2", "--model_name2", type=str, help="model name layer 2")
+parser.add_argument("-d", "--dates", type=str, nargs='+', help="date folders to process")
+parser.add_argument("-m", "--metrics", type=str, help="direction and metrics")
+parser.add_argument("-du", "--usage", type=str, help="dataset usage")
+parser.add_argument("-am", "--anchor_mode", type=str, help="anchor mode")
 parser.add_argument("-cc", "--corr_coef", type=str, default='mle', help="correlation coefficient")
-parser.add_argument("-it", "--iteration", type=int, default=1, help="iteration number")
-parser.add_argument("-dt", "--dataset_type", type=str, default="train", help="dataset type")
-parser.add_argument("-tt", "--test_mode", action="store_true", help="test_mode")
+parser.add_argument("-em", "--eval_method", type=str, help="evaluation method")
+parser.add_argument("-it", "--iteration", type=int, help="iteration number")
+parser.add_argument("-t", "--test_mode", action="store_true", help="test mode or not")
 args = parser.parse_args()
 
-dirc_mets = args.direction_metrics
-anchor_mode = args.anchor_mode
-model_corr = args.corr_coef if args.corr_coef == 'mle' or args.corr_coef == 'adjust' else f'{args.corr_coef}_cc'
-iter_num = args.iteration
-# save_answer = args.save_answer
-dataset_type = args.dataset_type
-model_name = args.model_name
-model_path = args.model_path
-test_mode = args.test_mode
 
-print(dirc_mets, anchor_mode, model_corr, iter_num)
+if args.model_name1 is None:
+    raise ValueError('Missing Value: model_name1')
 
-# %% [markdown]
-# # BR: DR Eval
+model_name1 = args.model_name1
+print('Model Name L1:', model_name1)
 
-# %%
-# Dual Radio Example
-if args.dates is not None:
-    selected_dates = args.dates
+# { all }
+# { BR, A, B, R, G, O1, O2, Y }
+# { subBR, subA, subB, subR, subG, subO1, subO2, subY }
+route = 'BR' if args.route is None else args.route
+model_name2 = route if args.model_name2 is None else args.model_name2
+print('Model Name L2:', model_name2)
+
+if args.route is None:
+    selected_routes = ['BR']
 else:
-    selected_dates = data_loader(query_dates=True)
-    # selected_dates = []
-
-if args.route is not None:
     if args.route == 'all':
-        selected_routes = ['BR', 'A', 'B', 'R', 'G', 'O2']
+        selected_routes = ['BR', 'A', 'B', 'R', 'G', 'O1', 'O2', 'Y']
     elif 'sub' in args.route:
-        rm_element = args.route[3:]
-        selected_routes = ['BR', 'A', 'B', 'R', 'G', 'O2']
-        selected_routes.remove(rm_element)
+        # eval
+        selected_routes = [args.route[3:]]
+        route = args.route[3:]
     else:
         selected_routes = [args.route]
-else:
-    route = model_name.replace('sub', '')
-    selected_routes = [route]
-    # selected_routes = ['BR']
-# route = args.route if args.route is not None else 'BR'
-route = args.route
+print('Setup/Eval Routes:', route)
+print('Selected Routes:', selected_routes)
 
+selected_dates = data_loader(query_dates=True) if args.dates is None else args.dates
+print('Selected Dates:', selected_dates)
+
+# { dl_lost, dl_excl, ul_lost, ul_excl }
+dirc_mets = 'dl_lost' if args.metrics is None else args.metrics
+print('Performance Metrics:', dirc_mets)
+
+# { training, testing, validation }
+dataset_usage = 'training' if args.usage is None else args.usage
+print('Dataset Usage:', dataset_usage)
+
+# { by_event, by_packet, by_mixed }
+anchor_mode = 'by_event' if args.anchor_mode is None else args.anchor_mode
+print('Anchor Mode:', anchor_mode)
+
+# { mle, adjust, zero, max, 25%, 50%, 75% }
+model_corr = args.corr_coef if args.corr_coef == 'mle' or args.corr_coef == 'adjust' else f'{args.corr_coef}_cc'
+print('Model C.C.:', model_corr)
+
+# { hist, kde }
+eval_method = 'hist' if args.eval_method is None else args.eval_method
+print('Evaluation Method:', eval_method)
+
+# { x∈Ｎ | x ≥ 1, recommended: 3 }
+iter_num = 3 if args.iteration is None else args.iteration
+print('Iteration Number:', iter_num)
+
+# take 1 data only
+test_mode = args.test_mode
+print('Test Mode:', test_mode)
+
+
+# %% [markdown]
+# # Dual Radio Evaluation
+
+# %%
+print('----------------')
 filepaths = data_loader(mode='dr', selected_dates=selected_dates, selected_routes=selected_routes)
-
-if args.slice is not None:
-    filepaths = filepaths[:args.slice]
-
-print(selected_routes)
-print(len(filepaths))
+print('Number of Files:', len(filepaths))
 # pprint(filepaths)
+print('----------------')
 
-# # %%
-print('=======================', model_corr, '=======================')
-# dirc_mets_list = ['dl_lost', 'ul_lost', 'dl_excl', 'ul_excl']
-# for dirc_mets in dirc_mets_list:
-eval = DrEval(filepaths, route, dataset_type,
-        model_path, model_name, anchor_mode,
-        dirc_mets=dirc_mets, model_corr=model_corr,
-        sp_columns=['type'], ts_column='Timestamp', w_size=0.01,
-        iter_num=iter_num, test_mode=test_mode)
-# eval = DrEval(filepaths, args.route, model_corr, sr_model_id, sr_model_dscp, dr_model_id, dr_model_dscp, dirc_mets=dirc_mets,
-#             anchor_mode=anchor_mode, save_answer=save_answer, dataset_type=args.dataset_type)
-eval.run_hist_method(N=iter_num)
-eval.plot()
-
-
-# python3 eval_dr_handover_profile.py -r A -m all -dt test -mm dl_lost -cc mle -p 20240630_latest_model -am by_event -it 1 -d 2024-03-19 2024-03-20 2024-06-18-1 2024-06-19-1 2024-06-20-1 2024-06-21-1 -tt
+eval = DrEval(filepaths, model_name1, model_name2, route,
+              dirc_mets, anchor_mode, model_corr, dataset_usage, eval_method, iter_num, test_mode)

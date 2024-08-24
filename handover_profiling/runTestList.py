@@ -18,12 +18,10 @@ test_scenario_default = [
         # 'seed':[55688],
         # 'train':['train1','train2','train3'],#,'train'],
         # 'test':['test1','test2','test3'],
-        # # 'time_seq':[20],
-        # # 'predict_t':[2],
-        # # 'target':['setup','RLF'],
-        '-r': ['BR', 'A'],
-        '-dm': ['dl_lost'],
-    }    
+        # 'time_seq':[20],
+        # 'predict_t':[2],
+        # 'target':['setup','RLF'],
+    }
 ]
 
 

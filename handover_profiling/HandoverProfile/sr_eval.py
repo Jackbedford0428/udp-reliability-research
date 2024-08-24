@@ -19,57 +19,39 @@ __all__ = [
 ]
 
 class SrEval:
-    def __init__(
-        # self, filepaths, model_prefix='Test',
-        # model_id=None, model_dscp=None,
-        # load_path='./20240630_latest_model', save_path='./20240630_latest_model', path2results=None,
-        # dirc_mets='dl_lost',
-        # sp_columns=['type'], ts_column='Timestamp',
-        # save_answer=False, test_mode=False,
-        # dataset_type='train',
-        self, filepaths, route, dataset_type,
-        model_path, model_name,
-        dirc_mets='dl_lost',
-        sp_columns=['type'], ts_column='Timestamp', w_size=0.01,
-        iter_num=1, test_mode=False
+    def __init__(self,
+                 filepaths, model_name1, model_name2, route,
+                 dirc_mets='dl_lost', dataset_type='training', eval_method='hist', iter_num=3, test_mode=False,
+                 sp_columns=['type'], ts_column='Timestamp', w_size=0.01,
+                 load_path='.', save_path='.'
     ):
-        # if model_id is None:
-        #     raise TypeError("請輸入模型編號")
         
-        self.iter_num = iter_num
-        self.test_mode = test_mode
-        # self.anchor_mode = anchor_mode
-        self.sp_columns = sp_columns[:]
-        self.ts_column = ts_column
-        self.w_size = w_size
+        self.filepaths = copy.deepcopy(filepaths)
+        self.model_name1 = model_name1
+        self.model_name2 = model_name2
+        self.route = route
+        
+        self.save_path = save_path
+        self.load_path = load_path
         
         self.dirc_mets = dirc_mets
         self.dirc, self.mets = dirc_mets[:2], dirc_mets[-4:]
         self.DIRC_TYPE = 'Downlink' if self.dirc == 'dl' else 'Uplink'
         self.METS_TYPE = 'Packet Loss' if self.mets == 'lost' else 'Excessive Latency'
         self.RATE_TYPE = 'PLR' if self.mets == 'lost' else 'ELR'
-        
-        self.filepaths = copy.deepcopy(filepaths)
-        # self.model_corr = model_corr
         self.dataset_type = dataset_type
+        self.eval_method = eval_method
+        self.iter_num = iter_num
+        self.sp_columns = sp_columns[:]
+        self.ts_column = ts_column
+        self.w_size = w_size
+        self.test_mode = test_mode
         
-        self.model_path = model_path
-        self.model_name = model_name if model_name is not None else route
-        self.route = route if route is not None else model_name.replace('sub', '')
-        
-        self.load_path = os.path.join(self.model_path, self.model_name, self.dirc_mets, 'sr', 'train', 'models', self.model_name)
-        # self.dr_load_path = os.path.join(self.model_path, self.model_name, self.dirc_mets, f'dr_anchor_{self.anchor_mode}', 'train', 'models', self.model_name)
-        self.save_path = os.path.join(self.model_path, self.model_name, self.dirc_mets, 'sr', self.dataset_type, self.route)
+        self.load_path = os.path.join(self.load_path, self.model_name1, self.model_name2, self.dirc_mets, 'sr', 'models', self.model_name2)
+        self.save_path = os.path.join(self.save_path, self.model_name1, self.model_name2, self.dirc_mets, 'sr', self.route, self.dataset_type)
         
         print(self.save_path)
         print(self.load_path)
-        # print(self.dr_load_path)
-        
-        # if path2results is None:
-        #     with open(os.path.join(os.getcwd(), "save_path.txt"), "r") as f:
-        #         self.path2results = f.readline()
-        # else:
-        #     self.path2results = path2results
         
         try:
             with open(f'{self.load_path}_kde_models.pkl', 'rb') as f:
@@ -95,9 +77,15 @@ class SrEval:
                 self.prob_models = pickle.load(f)
         
         self.date, self.hms_count, self.hex_string, self.figure_id = figure_identity()
-        # self.save_name = f'{self.model_prefix}_{self.date}_{self.hms_count}_{self.hex_string}'
-        self.save_name = f'{self.model_name}_{self.route}'
+        self.save_name = f'{self.model_name2}_{self.route}'
         self.records = []
+        
+        if self.eval_method == 'hist':
+            print('run_hist_method()')
+            self.run_hist_method()
+        
+        print('plot()')
+        self.plot()
 
     @staticmethod
     def generate_random_boolean(probability_true):
@@ -194,11 +182,6 @@ class SrEval:
             
             tmp['type'] = tag
             
-            # if i == 0:
-            #     answer = tmp.copy()
-            # else:
-            #     answer = pd.concat([answer, tmp], axis=0)
-            
             try:
                 answer = pd.concat([answer, tmp], axis=0)
             except:
@@ -264,7 +247,8 @@ class SrEval:
         return answer, eval_value, ground_value
     
     
-    def run_hist_method(self, N=5):
+    def run_hist_method(self):
+        N = self.iter_num
         dirc, mets = self.dirc, self.mets
         RATE_TYPE = self.RATE_TYPE
         n = len(self.filepaths)
@@ -348,22 +332,7 @@ class SrEval:
             
             self.records.append((loss_rate_list, mean_value, std_deviation, ground_value, error, sm_dev, sm_trip, path))
             
-            # Save Answers
-            # if self.save_answer:
-            #     # save_path = os.path.join(self.path2results, self.model_name, 'sr', self.dirc_mets, f'{self.save_name}_iter{N}')
-            #     save_path = os.path.join(self.path2results, self.model_name, self.dataset_type, 'sr', self.dirc_mets, f'{self.save_name}_iter{N}')
-            #     if not os.path.isdir(save_path):
-            #         os.makedirs(save_path)
-                    
-            #     save_path = os.path.join(save_path, path.replace('/', '\\'))
-            #     print(save_path)
-                
-            #     answer.to_csv(save_path, index=False)
-            
             # Save Results
-            # save_path = os.path.join(self.save_path, self.model_name, 'sr', self.dirc_mets, 'results')
-            # save_path = os.path.join(self.save_path, self.model_name, self.dataset_type, 'sr', self.dirc_mets, 'results')
-            # save_path = os.path.join(self.save_path, 'results')
             save_path = self.save_path
             if not os.path.isdir(save_path):
                 os.makedirs(save_path)
@@ -374,16 +343,13 @@ class SrEval:
             
             with open(save_path, 'wb') as f:
                 pickle.dump(self.records, f)
-            
-            # Update plot iteration number
-            self.iter_num = N
     
     
     def plot(self, title=None):
         RATE_TYPE = self.RATE_TYPE
         
         if title == None:
-            title = f'SR {self.DIRC_TYPE} {self.RATE_TYPE} | {self.model_name}_{self.route}'
+            title = f'SR {self.DIRC_TYPE} {self.RATE_TYPE} | {self.model_name2}_{self.route}'
         
         # Sample data
         x = [s[3] for s in self.records]  # Ground truths
@@ -454,9 +420,6 @@ class SrEval:
         plt.gcf().autofmt_xdate()
         
         # Save figure
-        # save_path = os.path.join(self.save_path, self.model_name, 'sr', self.dirc_mets, 'figures')
-        # save_path = os.path.join(self.save_path, self.model_name, self.dataset_type, 'sr', self.dirc_mets, 'figures')
-        # save_path = os.path.join(self.save_path, 'figures')
         save_path = self.save_path
         if not os.path.isdir(save_path):
             os.makedirs(save_path)
@@ -471,7 +434,6 @@ class SrEval:
         plt.close(fig)
         
         save_path = self.save_path
-        # save_path = os.path.join(self.save_path, 'logs')
         if not os.path.isdir(save_path):
             os.makedirs(save_path)
         # save_path = os.path.join(save_path, f'{self.save_name}_iter{self.iter_num}.csv')
@@ -484,5 +446,4 @@ class SrEval:
             writer.writerow(['RMSE (%)', 'τ (p.v.)', 'Underestimation (%)', 'Overestimation (%)'])
             # 寫入資料
             writer.writerow([f'{rmse:.3f} ({rmse_rate:.1f}%)', f'{tau:.2f} ({p_value:.3f})', f'{underestimation_rate:.1f}%', f'{overestimation_rate:.1f}%'])
-        
         

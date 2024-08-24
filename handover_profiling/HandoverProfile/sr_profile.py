@@ -17,21 +17,18 @@ __all__ = [
 ]
 
 class SrProfile():
-    def __init__(
-        self, filepaths, model_prefix='Test',
-        model_id=None, model_dscp=None,
-        save_path='.',
-        epochs=2, dirc_mets='dl_lost',
-        scope=None, sp_columns=['type'], ts_column='Timestamp',
-        w_size=0.01, sd_factor=3,
-        test_mode=False
+    def __init__(self,
+                 filepaths, model_name1, model_name2, route,
+                 dirc_mets='dl_lost', epochs=3, test_mode=False,
+                 scope=None, sp_columns=['type'], ts_column='Timestamp', w_size=0.01, sd_factor=3,
+                 save_path='.'
     ):
-        if model_id is None:
-            raise TypeError("請輸入模型編號")
         
         self.filepaths = copy.deepcopy(filepaths)
-        self.model_name = model_id if model_dscp is None else model_id + '_' + model_dscp
-        self.model_prefix = model_prefix
+        self.model_name1 = model_name1
+        self.model_name2 = model_name2
+        self.route = route
+        
         self.save_path = save_path
         
         self.dirc_mets = dirc_mets
@@ -45,7 +42,7 @@ class SrProfile():
         self.sd_factor = sd_factor
         self.test_mode = test_mode
         
-        print(self.save_path, self.model_name, self.model_prefix, self.dirc_mets)
+        print(self.save_path, self.model_name1, self.model_name2, self.dirc_mets)
         
         if scope is None:
             self.scope = {
@@ -77,9 +74,13 @@ class SrProfile():
             if epoch > 0:
                 self.scope = copy.deepcopy(self.scope_models['result'])
             
+            print("reset()")
             self.reset()
+            print("construct_profile()")
             self.construct_profile()
+            print("modeling()")
             self.modeling()
+            
             print('--------------')
             print('Size of Profiles:', getsizeof(self.Profile))
             print('Total Size:', getsizeof(self))
@@ -156,11 +157,14 @@ class SrProfile():
         return total_area
     
     @staticmethod
-    def total_area_kde(kde, lower_bound=-np.inf, upper_bound=np.inf):
-        # 定義積分函數
+    def total_area_kde(kde, lower_bound=-10, upper_bound=10):
+        # 定義積分函數: 由於邊界最大預設為 (-10, 10) 因此不考慮負無窮到正無窮
+        print('hello')
         def integrand(x):
             return kde(x)
-        total_area, _ = quad(integrand, lower_bound, upper_bound)
+        print('fuck you')
+        total_area, _ = quad(integrand, lower_bound, upper_bound)  # <-- 幹你娘一直莫名卡死
+        print('damn')
         return total_area
 
 
@@ -336,7 +340,7 @@ class SrProfile():
         n = len(self.filepaths)
         for i, filepath in enumerate(self.filepaths):
             
-            if self.test_mode and i > 0:
+            if self.test_mode and i > 1:
                 break
             
             path = filepath[1] if dirc == 'dl' else filepath[2]
@@ -425,6 +429,8 @@ class SrProfile():
             
             self.hist_models[tag] = table.copy()
             
+            # print('11111')
+            
             if len(trigger_lst) == 0:
                 continue
             
@@ -433,6 +439,8 @@ class SrProfile():
             
             PLR = sum(table[mets]) / (sum(table['tx_count']) + 1e-9) * 100
             self.plr_models[tag] = PLR
+            
+            # print('22222')
             
             # if loex_data == 1, then kde function bumps error: 
             # ValueError: `dataset` input should have multiple elements.
@@ -453,29 +461,46 @@ class SrProfile():
                 
                 self.scope_models['result'][tag] = (left_bound, right_bound)
             
-            x = np.asarray(table['window_id'], dtype=np.float64)
-            y = np.asarray(table[RATE_TYPE], dtype=np.float64)
+            # print('33333')
             
-            # 計算直方圖的面積
-            hist_area = SrProfile.total_area_histogram_with_centers(x, y, w_size)
-            # print("Total area of histogram:", hist_area)
+            # x = np.asarray(table['window_id'], dtype=np.float64)
+            # y = np.asarray(table[RATE_TYPE], dtype=np.float64)
             
-            kde1 = gaussian_kde(loex_data)
-            kde2 = gaussian_kde(xmit_data)
-            def kde(x):
-                kde2_values = kde2(x)
-                # 檢查 kde2 是否為零，如果是則返回一個超大值，把 loss rate 壓成 0
-                kde2_values[kde2_values == 0] = 1e9
-                return kde1(x) / kde2_values
+            # print('33333.1')
             
-            # 計算 KDE 下的總面積（只計算正負3個標準差內的點，理論上 scalar 會稍微高估，但不會太多）
-            kde_area = SrProfile.total_area_kde(kde, left_bound, right_bound)
-            # print("Total area under KDE:", kde_area)
+            # # 計算直方圖的面積
+            # hist_area = SrProfile.total_area_histogram_with_centers(x, y, w_size)
+            # # print("Total area of histogram:", hist_area)
             
-            scalar = hist_area / kde_area
-            # print("Scalar:", scalar)
+            # print('33333.2')
             
-            self.kde_models[tag] = (scalar, kde1, kde2)
+            # kde1 = gaussian_kde(loex_data)
+            # kde2 = gaussian_kde(xmit_data)
+            
+            # print('33333.3')
+            
+            # def kde(x):
+            #     kde2_values = kde2(x)
+            #     # 檢查 kde2 是否為零，如果是則返回一個超大值，把 loss rate 壓成 0
+            #     kde2_values[kde2_values == 0] = 1e9
+            #     return kde1(x) / kde2_values
+
+            # print('33333.4')
+            
+            # # 計算 KDE 下的總面積（只計算正負3個標準差內的點，理論上 scalar 會稍微高估，但不會太多）
+            # kde_area = SrProfile.total_area_kde(kde, left_bound, right_bound)
+            # # print("Total area under KDE:", kde_area)
+            
+            # print('33333.5')
+            
+            # scalar = hist_area / kde_area
+            # # print("Scalar:", scalar)
+            
+            # print('33333.6')
+            
+            # self.kde_models[tag] = (scalar, kde1, kde2)
+            
+            # print('44444')
     
     
     def plot(self):
@@ -504,21 +529,21 @@ class SrProfile():
             ax_twin.bar(x, y1, label='tx_packet', color='tab:blue', width=0.01, alpha=0.15)
             ax.bar(x, y2, label='loss_rate', color='tab:blue', width=0.01, alpha=0.97)
             
-            if kde1 is not None and kde2 is not None:
-                x = np.linspace(min(xmit_data), max(xmit_data), 1000)
+            # if kde1 is not None and kde2 is not None:
+            #     x = np.linspace(min(xmit_data), max(xmit_data), 1000)
                 
-                def kde(x):
-                    kde2_values = kde2(x)
-                    # 檢查 kde2 是否為零，如果是則返回一個超大值，把 loss/excl rate 壓成 0
-                    kde2_values[kde2_values == 0] = 1e9
-                    return kde1(x) / kde2_values
+            #     def kde(x):
+            #         kde2_values = kde2(x)
+            #         # 檢查 kde2 是否為零，如果是則返回一個超大值，把 loss/excl rate 壓成 0
+            #         kde2_values[kde2_values == 0] = 1e9
+            #         return kde1(x) / kde2_values
             
-                density = scalar * kde(x)
-                ax.fill_between(x, density, label='KDE', color='tab:orange', alpha=0.45, linewidth=0)
+            #     density = scalar * kde(x)
+            #     ax.fill_between(x, density, label='KDE', color='tab:orange', alpha=0.45, linewidth=0)
     
             # find the scope and boundaries
             ax.axvline(x=0, color='red', linestyle='-', alpha=0.5)
-            ax.axvline(x=self.Profile[tag]['interruption_time'], color='blue', linestyle='-', alpha=0.5)
+            # ax.axvline(x=self.Profile[tag]['interruption_time'], color='blue', linestyle='-', alpha=0.5)
             ax.axvline(x=left_bound, color='blue', linestyle='--', label=f'-{sd_factor} Std')
             ax.axvline(x=right_bound, color='blue', linestyle='--', label=f'+{sd_factor} Std')
             
@@ -536,9 +561,9 @@ class SrProfile():
             ax.text(left+0.06*(right-left), bottom+0.73*(top-bottom), f'Event Count: {count}\nTrigger Loss: {trigger} ({trigger_rate}%)\nAvg {RATE_TYPE}: {LossR}% ({LossR_}%)\nAvg INTR: {intr} (sec)', ha='left', fontweight='bold', fontsize=10)
             
             if self.epoch == 'last':
-                ax.set_title(f'{DIRC_TYPE} {RATE_TYPE}: {tag} | {self.model_prefix}')
+                ax.set_title(f'{DIRC_TYPE} {RATE_TYPE}: {tag} | {self.model_name2}')
             else:
-                ax.set_title(f'{DIRC_TYPE} {RATE_TYPE}: {tag} | {self.model_prefix} {self.epoch} epoch')
+                ax.set_title(f'{DIRC_TYPE} {RATE_TYPE}: {tag} | {self.model_name2} {self.epoch} epoch')
                 
             ax.set_ylabel(METS_TYPE)
             ax.set_xlabel('Relative Timestamp (sec)')
@@ -554,14 +579,14 @@ class SrProfile():
             plt.tight_layout()
             plt.gcf().autofmt_xdate()
             
-            save_path = os.path.join(self.save_path, self.model_name, self.dirc_mets, 'sr', 'train', 'models', 'plot')
+            save_path = os.path.join(self.save_path, self.model_name1, self.model_name2, self.dirc_mets, 'sr', 'models', 'plot')
             if not os.path.isdir(save_path):
                 os.makedirs(save_path)
             
             if self.epoch == 'last':
-                save_path = os.path.join(save_path, f'{self.model_prefix}_{tag}.png')
+                save_path = os.path.join(save_path, f'{self.model_name2}_{tag}.png')
             else:
-                save_path = os.path.join(save_path, f'{self.model_prefix}_{tag}_{self.epoch}.png')
+                save_path = os.path.join(save_path, f'{self.model_name2}_{tag}_{self.epoch}.png')
             
             print(save_path)
             fig.savefig(save_path, dpi=300, bbox_inches='tight')
@@ -571,16 +596,16 @@ class SrProfile():
     
     
     def save_models(self):
-        save_path = os.path.join(self.save_path, self.model_name, self.dirc_mets, 'sr', 'train', 'models')
+        save_path = os.path.join(self.save_path, self.model_name1, self.model_name2, self.dirc_mets, 'sr', 'models')
         if not os.path.isdir(save_path):
             os.makedirs(save_path)
         
         if self.epoch == 'last':
-            print('Save models:', self.model_prefix, '->', save_path)
-            save_path = os.path.join(save_path, self.model_prefix)
+            print('Save models:', self.model_name2, '->', save_path)
+            save_path = os.path.join(save_path, self.model_name2)
         else:
-            print('Save models:', f'{self.model_prefix}_{self.epoch}', '->', save_path)
-            save_path = os.path.join(save_path, f'{self.model_prefix}_{self.epoch}')
+            print('Save models:', f'{self.model_name2}_{self.epoch}', '->', save_path)
+            save_path = os.path.join(save_path, f'{self.model_name2}_{self.epoch}')
             
         print()
         
