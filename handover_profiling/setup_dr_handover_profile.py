@@ -31,93 +31,68 @@ pd.set_option('display.max_columns', 100)
 
 # %%
 parser = argparse.ArgumentParser()
-parser.add_argument("-d", "--dates", type=str, nargs='+', help="date folders to process")
 parser.add_argument("-r", "--route", type=str, help="experiment route")
-parser.add_argument("-s", "--slice", type=int, help="slice number for testing functionality")
+parser.add_argument("-n1", "--model_name1", type=str, help="model name layer 1")
+parser.add_argument("-n2", "--model_name2", type=str, help="model name layer 2")
+parser.add_argument("-d", "--dates", type=str, nargs='+', help="date folders to process")
 parser.add_argument("-m", "--metrics", type=str, help="direction and metrics")
-parser.add_argument("-sm", "--sr_model", type=str, help="sr model name")
-# parser.add_argument("-dm", "--dr_model", type=str, help="dr model name")
-parser.add_argument("-it", "--iteration", type=int, help="iteration number")
-parser.add_argument("-dt", "--usage", type=str, help="dataset usage")
-parser.add_argument("-sv", "--save", action="store_true", help="save answer or not")
-parser.add_argument("-tm", "--test_mode", action="store_true", help="test mode or not")
+parser.add_argument("-am", "--anchor_mode", type=str, help="anchor mode")
+parser.add_argument("-t", "--test_mode", action="store_true", help="test mode or not")
 args = parser.parse_args()
 
-# print(args.dates)
-# print(args.route)
-# print(args.slice)
-# print(args.metrics)
-# print(args.sr_model)
-# # print(args.dr_model)
-# print(args.iteration)
-# print(args.usage)
-# print(args.save)
 
-if args.dates is not None:
-    selected_dates = args.dates
+if args.model_name1 is None:
+    raise ValueError('Missing Value: model_name1')
+
+model_name1 = args.model_name1
+print('Model Name L1:', model_name1)
+
+# { all }
+# { BR, A, B, R, G, O1, O2, Y }
+# { subBR, subA, subB, subR, subG, subO1, subO2, subY }
+route = 'BR' if args.route is None else args.route
+model_name2 = route if args.model_name2 is None else args.model_name2
+print('Model Name L2:', model_name2)
+
+if args.route is None:
+    selected_routes = ['BR']
 else:
-    selected_dates = data_loader(query_dates=True)
-    # selected_dates = []
-
-if args.route is not None:
     if args.route == 'all':
-        selected_routes = ['BR', 'A', 'B', 'R', 'G', 'O2']
+        selected_routes = ['BR', 'A', 'B', 'R', 'G', 'O1', 'O2', 'Y']
     elif 'sub' in args.route:
-        rm_element = args.route[3:]
-        selected_routes = ['BR', 'A', 'B', 'R', 'G', 'O2']
-        selected_routes.remove(rm_element)
+        # setup
+        selected_routes = ['BR', 'A', 'B', 'R', 'G', 'O1', 'O2', 'Y']
+        selected_routes.remove(args.route[3:])
     else:
         selected_routes = [args.route]
-else:
-    selected_routes = ['BR']
-route = args.route if args.route is not None else 'BR'
+print('Setup/Eval Routes:', route)
+print('Selected Routes:', selected_routes)
 
-slice_num = args.slice
-dirc_mets = args.metrics if args.metrics is not None else 'dl_lost'
-# sr_model_name = args.sr_model if args.sr_model is not None else ''
-sr_model_dscp = args.sr_model if args.sr_model is not None else ''
-# dr_model_name = args.dr_model if args.dr_model is not None else ''
-# dr_model_dscp = args.sr_model if args.sr_model is not None else ''
-epochs = args.iteration if args.iteration is not None else 3
-dataset_type = args.usage if args.usage is not None else 'train'
-save_answer = args.save
+selected_dates = data_loader(query_dates=True) if args.dates is None else args.dates
+print('Selected Dates:', selected_dates)
+
+# { dl_lost, dl_excl, ul_lost, ul_excl }
+dirc_mets = 'dl_lost' if args.metrics is None else args.metrics
+print('Performance Metrics:', dirc_mets)
+
+# { by_event, by_packet, by_mixed }
+anchor_mode = 'by_event' if args.anchor_mode is None else args.anchor_mode
+print('Anchor Mode:', anchor_mode)
+
+# take 1 data only
 test_mode = args.test_mode
+print('Test Mode:', test_mode)
 
-# modeling
-# anchor_mode_lst = ['by_event', 'by_packet']
 
 # %% [markdown]
 # # Dual Radio Profiling
 
-# %% [markdown]
-# # Generate DR Model ID
-
 # %%
-# sr_model_name = '20240417_1333007d66_new_data_sync_v2'
-# sr_model_id = sr_model_name[:19] if len(sr_model_name) > 19 else sr_model_name
-# sr_model_dscp = sr_model_name[20:] if len(sr_model_name) > 19 else None
-
-# sr_model_i
-# dr_model_id = 'dr_20240417_1452001e84'
-# dr_model_id = 'dr_' + model_identity()
-
-# print('SR Model ID:', sr_model_id, sr_model_dscp)
-# print('DR Model ID:', dr_model_id)
-# print('DR Model ID:', dr_model_id, dr_model_dscp)
-
-# %% [markdown]
-# # BR Model
-
-# %%
-# Dual Radio Example
+print('----------------')
 filepaths = data_loader(mode='dr', selected_dates=selected_dates, selected_routes=selected_routes)
-print(len(filepaths))
+print('Number of Files:', len(filepaths))
 # pprint(filepaths)
+print('----------------')
 
-# %%
-# dirc_mets_list = ['dl_lost', 'ul_lost', 'dl_excl', 'ul_excl']
-# for dirc_mets in dirc_mets_list:
-dr_model = DrProfile(filepaths, route,
-            sr_model_id, sr_model_dscp, # dr_model_id, dr_model_dscp,
-            dirc_mets=dirc_mets, anchor_mode="by_event", test_mode=test_mode)
-
+dr_model = DrProfile(filepaths, model_name1, model_name2, route,
+                     dirc_mets, anchor_mode, test_mode)
